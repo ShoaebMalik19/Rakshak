@@ -1,0 +1,35 @@
+Fix these 3 critical issues in the current app. Make minimal changes only — do not rebuild or restructure anything.
+
+FIX 1 — REAL SMS VIA TWILIO (or fallback to SMS intent)
+Do not use Twilio (requires backend). Instead:
+- Use expo-sms to send a real SMS from the device when SOS triggers
+- Message: "🚨 RAKSHAK ALERT: [User name] needs help! Last known location: https://maps.google.com/?q=12.9716,77.5946 — This is an automated SOS from Rakshak app."
+- Send to all trusted contacts saved in AsyncStorage
+- If expo-sms is unavailable, open native SMS app with the message pre-filled using Linking.openURL("sms:+91XXXXXX?body=...")
+- Show real status: "SMS sent to Amma, Rohan, Neha" or "Opening SMS app..." — not just a fake in-app toast
+
+FIX 2 — IMPROVE ICONS AND UI
+- Replace all plain emoji icons with Lucide React Native icons (already available in Expo)
+- Home quick action cards: add colored icon backgrounds (rose red tint for SOS-related, gold tint for navigation, green tint for safety features)
+- Bottom tab bar: add active indicator pill under selected tab, use filled vs outline icon variants
+- Cards: add left colored border accent (3px) matching feature color
+- SOS button: make the pulse ring animation more dramatic — 3 concentric rings fading out
+- Add subtle gradient overlay on the home header area (cream to transparent)
+- Helpline pills: add small colored dot (red for police, pink for women's helpline, orange for ambulance) before the label
+- Profile screen: replace plain stats with styled metric cards (icon + number + label)
+- All screen headers: add a thin rose red underline accent below the title
+
+FIX 3 — COLORED SAFETY ZONES ON MAP
+On the Danger Zone / Safe Route map screens using React Native Maps:
+- Draw filled semi-transparent circles using MapView Circle component:
+  → Red circles (rgba 220,50,50,0.25 fill, 0.8 stroke) for 5 danger zones around Bengaluru
+  → Green circles (rgba 50,180,100,0.2 fill, 0.6 stroke) for 3 safe zones  
+  → Amber circles (rgba 200,150,0,0.2 fill, 0.6 stroke) for 2 medium-risk zones
+- Add a map legend card (bottom left corner): small colored squares with labels "Safe", "Caution", "Danger"
+- On the Safe Route screen: color the 3 route polylines:
+  → Route 1 (score 91): strokeColor #3A7D44 (green)
+  → Route 2 (score 74): strokeColor #B07D3A (amber)  
+  → Route 3 (score 58): strokeColor #C0445A (red)
+- Add custom map markers with safety score badge (e.g. pin showing "91" in green)
+
+Do not touch any other screens. Only change what is listed above. Keep all existing functionality intact.
