@@ -1,0 +1,50 @@
+The current app is built with Vite + React (web). Expo Go only runs React Native apps. 
+
+Please completely rebuild this as a React Native + Expo app so it works when scanned via Expo Go.
+
+IMPORTANT RULES:
+- Use Expo SDK 51
+- Use React Navigation v6 (Bottom Tab Navigator + Stack Navigator)
+- Use React Native Maps for map screens
+- Use expo-location for location (mock the actual location as Bengaluru: 12.9716, 77.5946)
+- Use expo-av for audio simulation
+- Use expo-haptics for SOS button press feedback
+- Use Lottie (lottie-react-native) for animations where needed
+- Use @expo-google-fonts/dm-sans and @expo-google-fonts/cormorant-garamond for fonts
+- Use AsyncStorage for saving user data locally
+- No backend. No paid APIs. No environment variables.
+- All data is mocked locally.
+
+KEEP ALL THE SAME FEATURES AND SCREENS:
+1. Onboarding (3 steps: name → contact → permissions)
+2. Home (SOS hold button with haptic + pulse animation, quick actions 2x2 grid, helpline pills, recent activity)
+3. Safe Route (Leaflet replaced with React Native Maps, 3 mock polyline routes on Bengaluru map with safety scores 91/74/58)
+4. Journey Watch (destination + time input, countdown timer, auto-alert simulation)
+5. Danger Zone Map (React Native Maps with mock danger zones as red circles, safe zones as green circles, community heatmap toggle, report incident bottom sheet)
+6. Camera Detector (radar sweep animation, scan simulation, result card)
+7. Scream Alert (soundwave animation, toggle, sensitivity slider, simulate detection button)
+8. Fake Call (full screen incoming call overlay with animation, accept/decline, in-call screen)
+9. Evidence Locker (mock list of recordings with play/share/delete)
+10. Trusted Contacts (add/remove contacts, primary badge, live location toggle)
+11. Profile (stats, toggles, motivational quote)
+
+DESIGN (same as current web version):
+- Background: #FAF6EF (warm cream)
+- Accent: #C0445A (rose red)  
+- Text: #1C1612
+- Gold: #B07D3A
+- Cards: white with borderRadius 16, subtle shadow
+- Bottom tab bar with 5 tabs: Home, Map, Journey, Detect, Profile
+- Helpline pills (Police 100, Women's Helpline 1091, Ambulance 108) always visible on Home above tab bar
+
+MOCK DATA:
+- User: Priya
+- Contacts: Amma, Rohan, Neha with Indian mobile numbers
+- 5 danger zones around Bengaluru with lat/lng
+- 3 safe route polylines around Bengaluru
+- 5 recent activity entries
+- 3 evidence locker mock entries
+
+Make sure package.json has all dependencies listed.
+The app must launch with: npx expo start
+It must show a QR code that works when scanned with Expo Go on Android.

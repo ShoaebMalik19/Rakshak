@@ -4,12 +4,16 @@ import {
   DM_Sans_700Bold,
   useFonts,
 } from "@expo-google-fonts/dm-sans";
+import {
+  CormorantGaramond_400Regular,
+  CormorantGaramond_600SemiBold,
+  CormorantGaramond_700Bold,
+} from "@expo-google-fonts/cormorant-garamond";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -38,6 +42,9 @@ export default function RootLayout() {
     DM_Sans_400Regular,
     DM_Sans_500Medium,
     DM_Sans_700Bold,
+    CormorantGaramond_400Regular,
+    CormorantGaramond_600SemiBold,
+    CormorantGaramond_700Bold,
   });
 
   useEffect(() => {
@@ -53,11 +60,9 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <AppProvider>
-                <RootLayoutNav />
-              </AppProvider>
-            </KeyboardProvider>
+            <AppProvider>
+              <RootLayoutNav />
+            </AppProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>
