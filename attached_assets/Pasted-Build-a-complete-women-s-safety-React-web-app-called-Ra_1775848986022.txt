@@ -1,0 +1,137 @@
+Build a complete women's safety React web app called "Rakshak" that runs entirely in the browser with zero backend. This must work in one go with no setup required.
+
+TECH STACK:
+- React 18 (via Create React App or Vite)
+- React Router v6 for navigation
+- Tailwind CSS for styling
+- Leaflet.js + React-Leaflet for maps
+- Lucide React for icons
+- All data is mocked locally — no backend, no API keys required
+
+DESIGN SYSTEM (inspired by clean modern mobile UI like Timezy):
+- Background: #FAF6EF (warm cream)
+- Primary accent: #C0445A (rose red)
+- Dark text: #1C1612
+- Secondary accent: #B07D3A (gold)
+- Safe/green: #3A7D44
+- Card background: #FFFFFF with subtle warm shadow
+- Border radius: 16px on cards, 24px on buttons
+- Font: Import 'DM Sans' from Google Fonts for body, 'Cormorant Garamond' for display headings
+- Bottom navigation bar with 5 tabs: Home, Map, Journey, Detect, Profile
+- Each screen has a top greeting bar and clean card-based layout
+- Smooth page transitions
+- Mobile-first layout, max-width 420px centered on screen, with phone frame shadow
+
+SCREENS AND FEATURES:
+
+1. ONBOARDING SCREEN (first launch)
+- Full screen with illustrated SVG background (soft clouds, warm tones)
+- App name "Rakshak" in Cormorant Garamond, large
+- Tagline: "Your quiet guardian, always."
+- 3-step onboarding: Step 1 = enter name, Step 2 = add first trusted contact (name + phone), Step 3 = fake permission grant animation (location, mic, camera) with checkmarks
+- "Let's Go" pill button in rose red
+
+2. HOME SCREEN
+- Top bar: "Good [Morning/Evening], [Name]" + bell icon + grid icon
+- Large circular SOS button in center (rose red, pulsing ring animation)
+- Label: "Hold for SOS" — on long press (1.5s), trigger SOS flow
+- SOS flow: show 5-second countdown modal with CANCEL button, after countdown show "Alert Sent" success state with green checkmark
+- 2x2 quick action grid below SOS:
+  → Safe Route | Journey Watch | Fake Call | Camera Scan
+- Summary cards row: Contacts saved, Zones nearby, Journeys completed
+- Bottom section: "Recent Activity" list (mock entries like "SOS triggered · 2 days ago", "Safe route used · yesterday")
+
+3. SAFE ROUTE SCREEN
+- Input fields: "From" and "To" location (mock values like "Home" → "MG Road Metro")
+- Show a Leaflet map centered on Bengaluru (13.0827, 80.2707) with 3 mock polyline routes drawn
+- Each route has a safety score badge: Route 1 = 91/100 (green), Route 2 = 74/100 (amber), Route 3 = 58/100 (red)
+- Recommend Route 1 with a green "Safest" tag
+- Below map: route detail cards showing distance, estimated time, safety score, lighting level (Good/Poor), crowd density (High/Low)
+
+4. JOURNEY WATCH SCREEN
+- Header: "Journey Watch"
+- Form: Destination input + Expected arrival time (time picker)
+- "Start Journey" button
+- Once started: show active journey card with countdown timer ticking down
+- "I Arrived Safely" green button to end journey
+- If timer hits 0: show red alert modal "Auto-alerting your contacts..." with animation
+- Journey history list below (3 mock past journeys with date, destination, status: Safe / Alerted)
+
+5. DANGER ZONE MAP SCREEN
+- Full Leaflet map centered on Bengaluru
+- 5 mock danger zones as red semi-transparent circles with labels (e.g. "High harassment reported", "Poor lighting zone")
+- 3 mock safe zones as green semi-transparent circles
+- Community heatmap toggle button (top right) — when toggled, overlay color-coded incident dots on the map
+- "Report Incident" floating button → opens bottom sheet modal with: location (auto-filled mock), incident type dropdown (Harassment / Poor Lighting / Theft / Suspicious Person), anonymous toggle, Submit button
+- After submit: show toast "Report submitted anonymously. Thank you."
+
+6. SPY CAMERA DETECTOR SCREEN
+- Header: "Camera Detector"
+- Instruction card: "Point your phone around the room slowly"
+- Large circular radar animation (rotating sweep, green on cream background)
+- "Start Scan" button → animate scan for 4 seconds → random result:
+  - Safe result: green checkmark, "No hidden cameras detected"
+  - Alert result (30% chance): red warning, "Potential IR source detected at 2 o'clock position"
+- Scan history: last 3 scans with location + result
+
+7. SCREAM / DISTRESS ALERT SCREEN
+- Toggle card: "Distress Listener" — ON/OFF
+- When ON: show animated soundwave visualization + "Listening for distress signals..."
+- Trigger keyword field: default "help me", user can customize
+- Sensitivity slider: Low / Medium / High
+- Test button: "Simulate Detection" → triggers SOS countdown modal
+- Info card explaining how it works
+
+8. FAKE CALL SIMULATOR SCREEN
+- Header: "Fake Call"
+- Contact selector: choose fake caller name + photo (3 presets: Mom, Office, Doctor)
+- Delay selector: Immediate / 10 sec / 30 sec
+- "Trigger Fake Call" button
+- When triggered: full screen incoming call UI overlays the app (like a real phone call screen) with caller name, avatar, green Accept + red Decline buttons, and phone ringing animation
+- On Accept: show "call in progress" screen with timer, mute/speaker/end buttons
+
+9. EVIDENCE LOCKER SCREEN
+- List of mock evidence entries: timestamp, type (Audio / Video), duration, SOS event it belongs to
+- Each entry has: Play button (mock), Share button, Delete button
+- Top banner: "All recordings are stored locally and encrypted"
+- Empty state illustration if no entries
+
+10. TRUSTED CONTACTS SCREEN (inside Profile tab)
+- List of saved contacts with avatar initials, name, phone
+- "Primary Contact" badge on first contact
+- Add contact button → inline form
+- Swipe to delete (or delete icon)
+- "Share my live location" toggle per contact
+
+11. HELPLINE QUICK ACCESS (persistent on Home screen bottom)
+- 3 pill buttons always visible above bottom nav: Police 100 | Women's Helpline 1091 | Ambulance 108
+- Tapping shows a modal: "Calling [service]..." with a mock dialing animation
+
+12. PROFILE SCREEN
+- User avatar (initials circle in rose red)
+- Name + edit button
+- Safety stats: Total SOS triggered, Journeys completed, Incidents reported
+- Settings toggles: Shake to SOS, Scream detection, Journey auto-alert
+- About Rakshak section
+- "Stay Safe" motivational quote at bottom
+
+ANIMATIONS AND POLISH:
+- SOS button: continuous soft pulsing ring in rose red
+- Radar sweep: smooth CSS rotation animation
+- Soundwave: animated bars that move when listening
+- Incoming call: slide up animation
+- Page transitions: fade in on route change
+- Toast notifications: slide in from top
+- Loading states: skeleton loaders on map and lists
+- All cards have hover lift effect (transform: translateY(-2px))
+
+MOCK DATA:
+- User name: "Priya"
+- 3 trusted contacts pre-loaded: Amma (+91 98765 43210), Rohan (+91 91234 56789), Neha (+91 87654 32109)
+- 5 danger zones on Bengaluru map with coordinates and descriptions
+- 3 safe routes as polylines on Bengaluru map
+- 5 recent activity entries
+- 3 evidence locker entries
+- 4 past journey entries
+
+Make sure the app runs with a single "npm install && npm start" or "npm run dev" command. Use Vite + React. Install all dependencies in package.json. Do not use any paid APIs or require any environment variables. The entire app must work offline with mock data only.

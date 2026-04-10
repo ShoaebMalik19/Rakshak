@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "qMgBDa1ZbADu0qNjCVQcJ"
+uri = "file://artifacts/rakshak/assets/images/icon.png"
+type = "image"
+title = "rakshak app icon"
