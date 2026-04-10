@@ -2,7 +2,7 @@ import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
 import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
@@ -68,41 +68,11 @@ function ClassicTabLayout() {
           ),
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
-          tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="map"
-        options={{
-          title: "Map",
-          tabBarIcon: ({ color }) => <Feather name="map" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="journey"
-        options={{
-          title: "Journey",
-          tabBarIcon: ({ color }) => <Feather name="navigation" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="detect"
-        options={{
-          title: "Detect",
-          tabBarIcon: ({ color }) => <Feather name="radio" size={22} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} />,
-        }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} /> }} />
+      <Tabs.Screen name="map" options={{ title: "Map", tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "map" : "map-outline"} size={22} color={color} /> }} />
+      <Tabs.Screen name="journey" options={{ title: "Journey", tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "time" : "time-outline"} size={22} color={color} /> }} />
+      <Tabs.Screen name="detect" options={{ title: "Detect", tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "radio" : "radio-outline"} size={22} color={color} /> }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ focused, color }) => <Ionicons name={focused ? "person" : "person-outline"} size={22} color={color} /> }} />
     </Tabs>
   );
 }

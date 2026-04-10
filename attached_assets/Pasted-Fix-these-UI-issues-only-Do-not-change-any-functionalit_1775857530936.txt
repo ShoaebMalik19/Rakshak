@@ -1,0 +1,71 @@
+Fix these UI issues only. Do not change any functionality or restructure any screens.
+
+FIX 1 — BROKEN ICONS (showing empty boxes everywhere)
+The icon font is not loading. Replace ALL lucide-react-native icons 
+with @expo/vector-icons which is built into Expo and always works.
+
+Replace imports like:
+import { Shield, MapPin } from 'lucide-react-native'
+With:
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons'
+
+Icon replacements to use:
+- Home/SOS related → Ionicons "shield" or "alert-circle"
+- Safe Route → Ionicons "navigate"
+- Journey Watch → Ionicons "time"
+- Fake Call → Ionicons "call"
+- Camera Scan → Ionicons "camera"
+- Map/Location → Ionicons "location"
+- Contacts → Ionicons "people"
+- Profile → Ionicons "person"
+- Settings → Ionicons "settings"
+- Bell → Ionicons "notifications"
+- Evidence → Ionicons "folder"
+- Scream/Audio → Ionicons "mic"
+- Police → MaterialCommunityIcons "police-badge"
+- Heart/Women → Ionicons "heart"
+- Ambulance → MaterialCommunityIcons "ambulance"
+- Add → Ionicons "add-circle"
+- Delete → Ionicons "trash"
+- Share → Ionicons "share-social"
+- Check → Ionicons "checkmark-circle"
+- Warning → Ionicons "warning"
+
+Go through EVERY file and replace every lucide icon with the 
+correct @expo/vector-icons equivalent. This is the most 
+important fix — every screen has broken icons right now.
+
+FIX 2 — QUICK ACTION CARDS (make them visual and appealing)
+The 4 quick action cards (Safe Route, Journey Watch, Fake Call, 
+Cam Scan) need visual upgrades:
+
+Each card should have:
+- Top half: colored illustration area (use a rounded rect with 
+  gradient-like solid color + a large centered icon)
+- Safe Route card: soft green background (#E8F5E9) + large 
+  Ionicons "navigate" icon in #3A7D44 (size 36)
+- Journey Watch card: soft amber background (#FFF8E1) + large 
+  Ionicons "time" icon in #B07D3A (size 36)
+- Fake Call card: soft rose background (#FCE4EC) + large 
+  Ionicons "call" icon in #C0445A (size 36)
+- Cam Scan card: soft blue background (#E3F2FD) + large 
+  Ionicons "camera" icon in #1565C0 (size 36)
+- Bottom half: white background with feature name (bold, 14px) 
+  and a 1-line description (11px, muted color)
+  - Safe Route: "Safest path to destination"
+  - Journey Watch: "Auto-alert if late"
+  - Fake Call: "Exit any situation"
+  - Cam Scan: "Detect hidden cameras"
+- Card height: 130px, border radius 16px
+- Subtle shadow: elevation 3
+
+FIX 3 — ONBOARDING ICON (broken box on step 1)
+The hourglass/timer icon on onboarding step 1 is broken.
+Replace it with:
+<Ionicons name="shield-checkmark" size={64} color="#C0445A" />
+Wrap it in a circle with background #FAEAED, width 100, 
+height 100, borderRadius 50, centered.
+
+FIX 4 — BOTTOM TAB BAR ICONS
+All tab bar icons are broken. Replace with:
+- Home tab: Ionicons "home" (outline) / "hom
