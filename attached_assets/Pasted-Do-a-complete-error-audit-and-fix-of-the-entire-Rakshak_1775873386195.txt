@@ -1,0 +1,87 @@
+Do a complete error audit and fix of the entire Rakshak app. 
+The goal is zero errors, zero warnings, app runs cleanly on 
+Expo Go on Android without any crashes or blank screens.
+
+Go through every single file systematically and fix all issues.
+
+STEP 1 — FIX ALL IMPORTS
+- Remove every import from 'lucide-react-native' completely
+- Replace with @expo/vector-icons (Ionicons, MaterialCommunityIcons, FontAwesome5)
+- Remove any import that references a package not listed in package.json
+- Check every screen file, every component file, every utility file
+- If any import says "cannot find module" — either install it with 
+  npx expo install or remove it and use a working alternative
+
+STEP 2 — FIX PACKAGE.JSON
+Make sure these exact packages are listed and install them:
+npx expo install \
+  @expo/vector-icons \
+  @react-navigation/native \
+  @react-navigation/bottom-tabs \
+  @react-navigation/stack \
+  react-native-screens \
+  react-native-safe-area-context \
+  react-native-gesture-handler \
+  react-native-reanimated \
+  react-native-maps \
+  expo-location \
+  expo-sms \
+  expo-haptics \
+  expo-av \
+  expo-sensors \
+  expo-splash-screen \
+  @react-native-async-storage/async-storage \
+  react-native-modal
+
+Remove any package from package.json that is NOT compatible 
+with Expo SDK 51. Do not use lucide-react-native. 
+Do not use lottie-react-native (causes build issues — 
+replace all Lottie animations with pure React Native 
+Animated API instead).
+
+STEP 3 — FIX NAVIGATION
+- Make sure NavigationContainer wraps the entire app in App.js
+- Make sure GestureHandlerRootView wraps everything as outermost
+- Make sure SafeAreaProvider wraps inside that
+- Bottom tab navigator must have all 5 screens registered:
+  Home, Map, Journey, Detect, Profile
+- Every screen component must be a valid React component 
+  returning valid JSX
+- No screen should be undefined or null
+
+App.js structure must be exactly:
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { NavigationContainer } from '@react-navigation/native'
+
+export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          [your navigator here]
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  )
+}
+
+STEP 4 — FIX ALL SCREENS
+Go through every screen and fix:
+
+- Every Text component must have string children only.
+  Never put a number or boolean directly inside Text.
+  Wrong: <Text>{count}</Text>
+  Right: <Text>{String(count)}</Text> or <Text>{`${count}`}</Text>
+
+- Every StyleSheet value must be a number or valid string.
+  No undefined values in StyleSheet.create()
+
+- Every FlatList must have:
+  keyExtractor={(item, index) => index.toString()}
+  data={array or []}  (never undefined)
+
+- Every map() call must have a valid array. 
+  Add fallback: (array || []).map(...)
+
+- Every A

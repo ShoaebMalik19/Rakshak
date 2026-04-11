@@ -1,0 +1,239 @@
+Make these 4 specific improvements only. Do not touch anything else.
+
+═══════════════════════════════════════════
+FIX 1 — SHAKE TO SOS
+═══════════════════════════════════════════
+Use expo-sensors Accelerometer to detect violent shake and 
+trigger SOS automatically.
+
+Implementation in HomeScreen.js:
+
+import { Accelerometer } from 'expo-sensors'
+import * as Haptics from 'expo-haptics'
+
+useEffect(() => {
+  Accelerometer.setUpdateInterval(300)
+  const subscription = Accelerometer.addListener(({ x, y, z }) => {
+    const acceleration = Math.sqrt(x * x + y * y + z * z)
+    if (acceleration > 2.8) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      triggerSOSCountdown()
+    }
+  })
+  return () => subscription.remove()
+}, [])
+
+- Only trigger if SOS countdown is NOT already active 
+  (add a ref flag: isSOSActive)
+- Show a small shake indicator on home screen: 
+  "Shake violently to trigger SOS" in small muted text 
+  below the SOS button
+- Works alongside the existing hold-to-SOS button
+
+
+═══════════════════════════════════════════
+FIX 2 — ENHANCE LANDING PAGE AND ONBOARDING UI
+═══════════════════════════════════════════
+Redesign the onboarding/landing screen to look premium and warm.
+
+LANDING / SPLASH SCREEN:
+- Full screen background: warm cream #FAF6EF
+- Two large decorative blurred circles (use View with 
+  borderRadius and opacity 0.15):
+  - Top right: large circle #C0445A, width 300, height 300, 
+    position absolute, top -80, right -80
+  - Bottom left: large circle #B07D3A, width 250, height 250,
+    position absolute, bottom -60, left -60
+- Center content:
+  - Shield icon (Ionicons "shield-checkmark") size 72, 
+    color #C0445A, inside a white circle, 
+    width 120, height 120, borderRadius 60, 
+    elevation 8, shadow
+  - App name "Rakshak" below — fontSize 42, 
+    fontWeight bold, color #1C1612, 
+    fontFamily serif (Georgia on Android)
+  - Tagline: "Your quiet guardian, always." 
+    fontSize 16, color #9C8878, marginTop 8, italic
+  - Thin rose red divider line: width 40, height 2, 
+    background #C0445A, marginTop 16, borderRadius 2
+- Bottom section:
+  - "Get Started" button: full width, height 56, 
+    background #C0445A, borderRadius 28, 
+    white text "Get Started", fontSize 16, fontWeight 600
+  - Below button: "Your data stays only on your device" 
+    in small muted text with a lock icon
+
+ONBOARDING STEP 1 (Enter Name):
+- Same decorative circles background
+- Step indicator dots at top (3 dots, active = rose red filled, 
+  inactive = light gray)
+- Large Ionicons "person-circle" icon, size 80, color #C0445A
+- Title: "What should we call you?" fontSize 24, bold, centered
+- Subtitle: "We'll personalize your safety experience" 
+  muted, centered
+- Name input: height 56, borderRadius 16, border 1.5px #C0445A, 
+  fontSize 18, textAlign center, background white
+- "Continue →" button same style as Get Started button
+
+ONBOARDING STEP 2 (Add Contact):
+- Large Ionicons "people" icon, size 80, color #C0445A
+- Title: "Who should we alert?" 
+- Two inputs: Contact Name + Phone Number
+- Phone input: keyboardType="phone-pad"
+- "Add Contact" button
+- Skip option: "I'll add later" in small muted text below
+
+ONBOARDING STEP 3 (Permissions):
+- Large Ionicons "shield-checkmark" icon, size 80, color #C0445A
+- Title: "Enable permissions"
+- 3 permission rows with animated checkmarks:
+  Each row: icon + label + animated green checkmark appearing 
+  one by one with 500ms delay
+  - Location: Ionicons "location" — "To detect your position"
+  - Microphone: Ionicons "mic" — "To detect distress sounds"  
+  - Camera: Ionicons "camera" — "To scan for hidden cameras"
+- "Start Protecting Me" button in rose red
+
+
+═══════════════════════════════════════════
+FIX 3 — MORE MAP ZONES WITH RED ZONE ALERTS
+═══════════════════════════════════════════
+Add more mock safety zones to the Danger Zone Map screen 
+and trigger an alert when user enters a red zone.
+
+ZONE DATA — replace existing mock zones with these 12 zones:
+
+GREEN ZONES (safe):
+1. Indiranagar: { lat: 12.9784, lng: 77.6408, radius: 600, 
+   label: "Indiranagar — Well lit, high footfall" }
+2. Koramangala: { lat: 12.9352, lng: 77.6245, radius: 500,
+   label: "Koramangala — Active area, CCTV coverage" }
+3. Whitefield IT Park: { lat: 12.9698, lng: 77.7500, radius: 700,
+   label: "Whitefield — Secured zone, security guards" }
+4. MG Road: { lat: 12.9756, lng: 77.6097, radius: 400,
+   label: "MG Road — High police presence" }
+
+YELLOW ZONES (caution):
+5. Majestic Bus Stand: { lat: 12.9775, lng: 77.5713, radius: 500,
+   label: "Majestic — Crowded, stay alert" }
+6. Shivajinagar: { lat: 12.9853, lng: 77.6010, radius: 450,
+   label: "Shivajinagar — Moderate risk after 8PM" }
+7. Hebbal: { lat: 13.0353, lng: 77.5947, radius: 550,
+   label: "Hebbal — Isolated stretches near lake" }
+8. Marathahalli: { lat: 12.9591, lng: 77.6974, radius: 500,
+   label: "Marathahalli — Traffic congestion, be cautious" }
+
+RED ZONES (danger):
+9. Mysore Road stretch: { lat: 12.9483, lng: 77.5413, radius: 600,
+   label: "Mysore Road — High harassment reports" }
+10. KR Market: { lat: 12.9659, lng: 77.5770, radius: 400,
+    label: "KR Market — Pickpocketing and harassment" }
+11. Tin Factory: { lat: 12.9955, lng: 77.6603, radius: 450,
+    label: "Tin Factory — Poor lighting, isolated at night" }
+12. Banashankari isolated road: { lat: 12.9256, lng: 77.5468, 
+    radius: 500,
+    label: "Banashankari — Reported incidents after 9PM" }
+
+ZONE COLORS:
+- Green: fillColor="rgba(58,125,68,0.18)" strokeColor="#3A7D44"
+- Yellow: fillColor="rgba(176,125,58,0.18)" strokeColor="#B07D3A"
+- Red: fillColor="rgba(192,68,90,0.25)" strokeColor="#C0445A"
+
+MAP LEGEND (bottom left card):
+- Small white card, padding 8px, borderRadius 10
+- 3 rows: colored dot + label
+  🟢 Safe zone
+  🟡 Caution zone  
+  🔴 Danger zone
+
+RED ZONE ENTRY ALERT:
+- Use expo-location watchPositionAsync to track user location
+- When user position is within radius of any RED zone:
+  - Trigger expo-haptics heavy vibration
+  - Show Alert.alert with:
+    Title: "⚠️ Danger Zone Detected"
+    Message: "[zone label]\n\nDo you want to alert your contacts?"
+    Buttons: 
+      "Alert Contacts" → trigger SMS send
+      "I'm Aware" → dismiss
+  - Only show alert once per zone entry 
+    (use a ref Set to track alerted zones)
+- For demo mode (if location unavailable): 
+  add a "Simulate Zone Entry" button that 
+  triggers a red zone alert manually
+
+
+═══════════════════════════════════════════
+FIX 4 — FAKE CALL UI EXACTLY LIKE TIMEZY REFERENCE
+═══════════════════════════════════════════
+The fake call screen should look exactly like a real 
+iOS/Android incoming call screen (similar to the clean 
+card-based UI in the reference image with soft colors 
+and rounded cards).
+
+FAKE CALL SETUP SCREEN:
+- Background: #FAF6EF cream
+- Title: "Fake Call" with subtitle "Escape any situation discreetly"
+- Caller selector — 3 cards in a row:
+  Each card: white, borderRadius 16, padding 12, centered
+  - Large avatar circle (60x60, borderRadius 30):
+    Mom: background #FCE4EC, initials "M", color #C0445A
+    Office: background #E3F2FD, initials "O", color #1565C0  
+    Doctor: background #E8F5E9, initials "D", color #3A7D44
+  - Name below avatar, fontSize 13, bold
+  - Selected state: border 2px rose red, slight scale up
+- Delay selector — pill buttons row:
+  "Now" | "10s" | "30s" | "1 min"
+  Active pill: background #C0445A, white text
+  Inactive: white background, border, dark text
+- "Trigger Fake Call" large button: rose red, full width, 
+  height 56, borderRadius 28
+- Info card below: 
+  Ionicons "information-circle" + 
+  "Your phone will ring like a real call"
+
+INCOMING CALL FULL SCREEN OVERLAY:
+When triggered, show a full screen Modal (animationType="slide"):
+- Background: dark overlay #1C1612 with slight transparency
+- Top section (40% of screen):
+  - Caller avatar circle: large 100x100, centered
+    with colored background matching selected contact
+  - "Incoming Call" label: small, muted, white, 
+    letterSpacing 3, uppercase, fontSize 11
+  - Caller name: fontSize 32, white, bold, marginTop 8
+  - Animated subtitle cycling through:
+    "Rakshak · Simulated Call" in muted white, fontSize 13
+- Middle: pulsing ring animation around avatar 
+  (3 rings, white, opacity fading, same as SOS animation)
+- Bottom section (30% of screen, 2 buttons side by side):
+  LEFT — Decline button:
+    Circle 72x72, background #FF3B30 (red)
+    Ionicons "call" rotated 135deg (hang up icon), white, size 32
+    Label "Decline" below in white, fontSize 12
+  RIGHT — Accept button:
+    Circle 72x72, background #34C759 (green)
+    Ionicons "call" icon, white, size 32
+    Label "Accept" below in white, fontSize 12
+
+IN-CALL SCREEN (after accepting):
+- Background: dark #1C1612
+- Caller avatar at top (same colored circle, 80x80)
+- Caller name: white, fontSize 28, bold
+- Call timer counting up: "0:00", "0:01"... white, fontSize 18, 
+  fontFamily monospace
+- "Rakshak Simulated Call" muted label
+- 4 control buttons in 2x2 grid (same style as Timezy reference):
+  Each button: white card, borderRadius 16, 72x72, centered icon
+  - Mute: Ionicons "mic-off", label "Mute"
+  - Speaker: Ionicons "volume-high", label "Speaker"  
+  - Hold: Ionicons "pause", label "Hold"
+  - End call: red background, Ionicons "call" rotated, 
+    label "End", tapping ends call and closes modal
+- Bottom label: "This is a simulated call for your safety"
+  in small muted text
+
+Do not change any other screen. Only modify:
+1. HomeScreen.js (shake detection)
+2. OnboardingScreen.js (UI redesign)
+3. MapScreen.js or DangerZoneScreen.js (zones + alert)
+4. FakeCallScreen.js (full UI redesign)
