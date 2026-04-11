@@ -50,3 +50,6 @@ externalPort = 3000
 [[ports]]
 localPort = 21990
 externalPort = 3002
+
+[nix]
+packages = ["zip"]
