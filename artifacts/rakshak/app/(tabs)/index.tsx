@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Accelerometer } from 'expo-sensors';
+import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -32,15 +34,45 @@ export default function HomeScreen() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const fadeIn = useRef(new Animated.Value(0)).current;
+  const isSOSActive = useRef(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  useEffect(() => { Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start(); }, []);
+  useEffect(() => {
+    Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+  }, []);
 
-  const handleSOSTrigger = () => setSOSVisible(true);
-  const handleSOSCancel = () => setSOSVisible(false);
-  const handleSOSComplete = (message: string) => { setSOSVisible(false); triggerSOS(); setToastMsg(message); setToastVisible(true); };
+  // Shake to SOS
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    Accelerometer.setUpdateInterval(300);
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
+      const acceleration = Math.sqrt(x * x + y * y + z * z);
+      if (acceleration > 2.8 && !isSOSActive.current) {
+        isSOSActive.current = true;
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setSOSVisible(true);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const handleSOSTrigger = () => {
+    isSOSActive.current = true;
+    setSOSVisible(true);
+  };
+  const handleSOSCancel = () => {
+    isSOSActive.current = false;
+    setSOSVisible(false);
+  };
+  const handleSOSComplete = (message: string) => {
+    setSOSVisible(false);
+    triggerSOS();
+    setToastMsg(message);
+    setToastVisible(true);
+    setTimeout(() => { isSOSActive.current = false; }, 5000);
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -51,17 +83,28 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: colors.mutedForeground }]}>{getGreeting()}</Text>
-            <View style={styles.titleWrap}><Text style={[styles.userName, { color: colors.foreground }]}>{userName}</Text><View style={[styles.titleUnderline, { backgroundColor: colors.primary }]} /></View>
+            <View style={styles.titleWrap}>
+              <Text style={[styles.userName, { color: colors.foreground }]}>{userName}</Text>
+              <View style={[styles.titleUnderline, { backgroundColor: colors.primary }]} />
+            </View>
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card }]}><Ionicons name="notifications" size={20} color={colors.foreground} /></TouchableOpacity>
             <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card }]}><Ionicons name="settings" size={20} color={colors.foreground} /></TouchableOpacity>
           </View>
         </View>
+
         <View style={[styles.sosCard, { backgroundColor: colors.card, borderLeftColor: colors.primary }]}>
           <View style={styles.sosCenter}><SOSButton onSOSTriggered={handleSOSTrigger} /></View>
-          <View style={[styles.sosHintRow, { backgroundColor: colors.primary + '08' }]}><Ionicons name="alert-circle" size={13} color={colors.primary} /><Text style={[styles.sosHint, { color: colors.mutedForeground }]}>Hold button for 1.5 seconds to trigger SOS</Text></View>
+          <View style={[styles.sosHintRow, { backgroundColor: colors.primary + '08' }]}>
+            <Ionicons name="alert-circle" size={13} color={colors.primary} />
+            <Text style={[styles.sosHint, { color: colors.mutedForeground }]}>Hold for 1.5s to trigger SOS</Text>
+          </View>
+          {Platform.OS !== 'web' && (
+            <Text style={[styles.shakeHint, { color: colors.mutedForeground }]}>Shake violently to trigger SOS</Text>
+          )}
         </View>
+
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Quick Actions</Text>
         <View style={styles.quickGrid}>
           {quickActions.map((action, i) => (
@@ -69,12 +112,20 @@ export default function HomeScreen() {
               <View style={[styles.quickTop, { backgroundColor: action.bg }]}>
                 <Ionicons name={action.icon as any} size={36} color={action.color} />
               </View>
-              <View style={styles.quickBottom}><Text style={[styles.quickLabel, { color: colors.foreground }]}>{action.label}</Text><Text style={[styles.quickDesc, { color: colors.mutedForeground }]}>{action.desc}</Text></View>
+              <View style={styles.quickBottom}>
+                <Text style={[styles.quickLabel, { color: colors.foreground }]}>{action.label}</Text>
+                <Text style={[styles.quickDesc, { color: colors.mutedForeground }]}>{action.desc}</Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
+
         <View style={styles.statsRow}>
-          {[{ label: 'Contacts', value: contacts.length, icon: 'people', color: '#4A90D9' }, { label: 'Journeys', value: journeysCompleted, icon: 'time', color: '#3A7D44' }, { label: 'SOS Sent', value: totalSOS, icon: 'alert-circle', color: '#C0445A' }].map((stat, i) => (
+          {[
+            { label: 'Contacts', value: contacts.length, icon: 'people', color: '#4A90D9' },
+            { label: 'Journeys', value: journeysCompleted, icon: 'time', color: '#3A7D44' },
+            { label: 'SOS Sent', value: totalSOS, icon: 'alert-circle', color: '#C0445A' },
+          ].map((stat, i) => (
             <View key={i} style={[styles.statCard, { backgroundColor: colors.card, borderLeftColor: stat.color }]}>
               <View style={[styles.statIcon, { backgroundColor: stat.color + '15' }]}><Ionicons name={stat.icon as any} size={16} color={stat.color} /></View>
               <Text style={[styles.statValue, { color: colors.foreground }]}>{stat.value}</Text>
@@ -82,11 +133,17 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
+
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Activity</Text>
         <View style={[styles.activityCard, { backgroundColor: colors.card, borderLeftColor: colors.primary }]}>
           {activities.slice(0, 5).map((activity, i) => (
             <View key={activity.id} style={[styles.activityRow, i < Math.min(activities.length, 5) - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-              <View style={[styles.activityIcon, { backgroundColor: colors.secondary }]}><Ionicons name={activity.icon === 'camera' ? 'camera' : activity.icon === 'phone' ? 'call' : activity.icon === 'map' ? 'navigate' : activity.icon === 'check-circle' ? 'checkmark-circle' : 'alert-circle'} size={14} color={colors.primary} /></View>
+              <View style={[styles.activityIcon, { backgroundColor: colors.secondary }]}>
+                <Ionicons
+                  name={activity.icon === 'camera' ? 'camera' : activity.icon === 'phone' ? 'call' : activity.icon === 'map' ? 'navigate' : activity.icon === 'check-circle' ? 'checkmark-circle' : 'alert-circle'}
+                  size={14} color={colors.primary}
+                />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.activityText, { color: colors.foreground }]}>{activity.text}</Text>
                 <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>{activity.time}</Text>
@@ -94,7 +151,11 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
-        <View style={[styles.motiveBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '25' }]}><Ionicons name="shield" size={18} color={colors.primary} /><Text style={[styles.motiveText, { color: colors.foreground }]}>Stay alert. You are never alone.</Text></View>
+
+        <View style={[styles.motiveBanner, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '25' }]}>
+          <Ionicons name="shield" size={18} color={colors.primary} />
+          <Text style={[styles.motiveText, { color: colors.foreground }]}>Stay alert. You are never alone.</Text>
+        </View>
       </Animated.ScrollView>
       <View style={{ position: 'absolute', bottom: bottomPad + 60, left: 0, right: 0 }}><HelplineBar /></View>
     </View>
@@ -113,9 +174,10 @@ const styles = StyleSheet.create({
   headerIcons: { flexDirection: 'row', gap: 10 },
   iconBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   sosCard: { borderRadius: 24, padding: 28, marginBottom: 24, alignItems: 'center', borderLeftWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4 },
-  sosCenter: { alignItems: 'center', marginBottom: 20 },
-  sosHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  sosCenter: { alignItems: 'center', marginBottom: 16 },
+  sosHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 8 },
   sosHint: { fontSize: 12 },
+  shakeHint: { fontSize: 11, textAlign: 'center', opacity: 0.7 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, marginTop: 4 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   quickCard: { width: '47.5%', height: 130, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
