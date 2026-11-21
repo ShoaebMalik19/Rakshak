@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Platform } from 'react-native';
+import { NATIVE_DRIVER } from '@/constants/anim';
 import * as Haptics from 'expo-haptics';
 import { useColors } from '@/hooks/useColors';
 
@@ -19,8 +20,8 @@ export default function SOSButton({ onSOSTriggered }: SOSButtonProps) {
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, easing: Easing.in(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, easing: Easing.out(Easing.ease), useNativeDriver: NATIVE_DRIVER }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 800, easing: Easing.in(Easing.ease), useNativeDriver: NATIVE_DRIVER }),
       ])
     );
     pulse.start();

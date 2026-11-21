@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Animated, Linking
+  Platform, Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Accelerometer } from 'expo-sensors';
@@ -13,6 +13,8 @@ import SOSButton from '../components/SOSButton';
 import SOSModal from '../components/SOSModal';
 import HelplineBar from '../components/HelplineBar';
 import Toast from '../components/Toast';
+import { HELPLINES, callNumber, timeAgo } from '../lib/emergency';
+import { NATIVE_DRIVER } from '../constants/anim';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -24,22 +26,23 @@ const getGreeting = () => {
 export default function HomeScreen({ navigation }: any) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { userName, contacts, activities, totalSOS, journeysCompleted, triggerSOS } = useApp();
+  const { userName, contacts, activities, totalSOS, journeysCompleted, recordSOS, shakeToSOS, activeJourney } = useApp();
   const [sosVisible, setSOSVisible] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastTone, setToastTone] = useState<'success' | 'warning'>('success');
   const fadeIn = useRef(new Animated.Value(0)).current;
   const isSOSActive = useRef(false);
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 0 : insets.bottom;
 
   useEffect(() => {
-    Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: NATIVE_DRIVER }).start();
   }, []);
 
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web' || !shakeToSOS) return;
     Accelerometer.setUpdateInterval(300);
     const subscription = Accelerometer.addListener(({ x, y, z }) => {
       const acceleration = Math.sqrt(x * x + y * y + z * z);
@@ -50,7 +53,7 @@ export default function HomeScreen({ navigation }: any) {
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [shakeToSOS]);
 
   const handleSOSTrigger = () => {
     isSOSActive.current = true;
@@ -62,36 +65,37 @@ export default function HomeScreen({ navigation }: any) {
     setSOSVisible(false);
   };
 
-  const handleSOSComplete = (message: string) => {
+  const handleSOSComplete = (summary: string) => {
     setSOSVisible(false);
-    triggerSOS();
-    setToastMsg(message);
+    recordSOS(summary);
+    setToastTone(summary.startsWith('SOS sent') ? 'success' : 'warning');
+    setToastMsg(summary);
     setToastVisible(true);
     setTimeout(() => { isSOSActive.current = false; }, 5000);
   };
 
   const quickActions = [
     {
-      icon: 'navigate', label: 'Safe Route', color: '#3A7D44', bg: '#E8F5E9',
-      desc: 'Safest path to destination',
+      icon: 'map', label: 'Safety Map', color: '#3A7D44', bg: '#E8F5E9',
+      desc: 'Zones, routes and reports',
       onPress: () => navigation.navigate('Map'),
     },
     {
       icon: 'time', label: 'Journey Watch', color: '#B07D3A', bg: '#FFF8E1',
-      desc: 'Auto-alert if late',
+      desc: activeJourney ? `Active: ${activeJourney.destination}` : 'Check-in timer with SOS',
       onPress: () => navigation.navigate('Journey'),
     },
     {
       icon: 'call', label: 'Fake Call', color: '#C0445A', bg: '#FCE4EC',
       desc: 'Exit any situation',
       onPress: () => navigation.navigate('IncomingCall', {
-        caller: { name: 'Mom', initials: 'M', color: '#FCE4EC' }
+        name: 'Mom',
       }),
     },
     {
-      icon: 'camera', label: 'Cam Scan', color: '#1565C0', bg: '#E3F2FD',
-      desc: 'Detect hidden cameras',
-      onPress: () => navigation.navigate('Detect'),
+      icon: 'construct', label: 'Safety Tools', color: '#1565C0', bg: '#E3F2FD',
+      desc: 'Scheduled fake call and more',
+      onPress: () => navigation.navigate('Tools'),
     },
   ];
 
@@ -101,7 +105,7 @@ export default function HomeScreen({ navigation }: any) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SOSModal visible={sosVisible} onCancel={handleSOSCancel} onComplete={handleSOSComplete} />
-      <Toast message={toastMsg} visible={toastVisible} onHide={() => setToastVisible(false)} />
+      <Toast message={toastMsg} tone={toastTone} visible={toastVisible} onHide={() => setToastVisible(false)} />
       <View style={[styles.headerFade, { backgroundColor: colors.primary + '10' }]} />
 
       <Animated.ScrollView
@@ -113,15 +117,16 @@ export default function HomeScreen({ navigation }: any) {
           <View>
             <Text style={[styles.greeting, { color: colors.mutedForeground }]}>{getGreeting()}</Text>
             <View style={styles.titleWrap}>
-              <Text style={[styles.userName, { color: colors.foreground }]}>{String(userName || 'Priya')}</Text>
+              <Text style={[styles.userName, { color: colors.foreground }]}>{String(userName || 'there')}</Text>
               <View style={[styles.titleUnderline, { backgroundColor: colors.primary }]} />
             </View>
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card }]}>
-              <Ionicons name="notifications" size={20} color={colors.foreground} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.iconBtn, { backgroundColor: colors.card }]}>
+            <TouchableOpacity
+              accessibilityLabel="Settings and contacts"
+              style={[styles.iconBtn, { backgroundColor: colors.card }]}
+              onPress={() => navigation.navigate('Profile')}
+            >
               <Ionicons name="settings" size={20} color={colors.foreground} />
             </TouchableOpacity>
           </View>
@@ -135,10 +140,19 @@ export default function HomeScreen({ navigation }: any) {
             <Ionicons name="alert-circle" size={13} color={colors.primary} />
             <Text style={[styles.sosHint, { color: colors.mutedForeground }]}>Hold for 1.5s to trigger SOS</Text>
           </View>
-          {Platform.OS !== 'web' && (
-            <Text style={[styles.shakeHint, { color: colors.mutedForeground }]}>
-              Shake violently to trigger SOS
-            </Text>
+          <Text style={[styles.shakeHint, { color: colors.mutedForeground }]}>
+            {Platform.OS === 'web'
+              ? 'Web preview: SOS prepares a message to copy or share. SMS works in the phone app.'
+              : shakeToSOS ? 'Or shake your phone hard to start SOS' : 'Shake to SOS is off (Profile)'}
+          </Text>
+          {safeContacts.length === 0 && (
+            <TouchableOpacity
+              style={[styles.noContacts, { backgroundColor: colors.accent + '18', borderColor: colors.accent + '55' }]}
+              onPress={() => navigation.navigate('Profile', { tab: 'contacts' })}
+            >
+              <Ionicons name="person-add" size={14} color={colors.accent} />
+              <Text style={[styles.noContactsText, { color: colors.accent }]}>Add an emergency contact so SOS can reach someone</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -166,7 +180,7 @@ export default function HomeScreen({ navigation }: any) {
           {[
             { label: 'Contacts', value: safeContacts.length, icon: 'people', color: '#4A90D9' },
             { label: 'Journeys', value: journeysCompleted || 0, icon: 'time', color: '#3A7D44' },
-            { label: 'SOS Sent', value: totalSOS || 0, icon: 'alert-circle', color: '#C0445A' },
+            { label: 'SOS Alerts', value: totalSOS || 0, icon: 'alert-circle', color: '#C0445A' },
           ].map((stat, i) => (
             <View key={i} style={[styles.statCard, { backgroundColor: colors.card, borderLeftColor: stat.color }]}>
               <View style={[styles.statIcon, { backgroundColor: stat.color + '15' }]}>
@@ -180,6 +194,11 @@ export default function HomeScreen({ navigation }: any) {
 
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Recent Activity</Text>
         <View style={[styles.activityCard, { backgroundColor: colors.card, borderLeftColor: colors.primary }]}>
+          {safeActivities.length === 0 && (
+            <Text style={[styles.emptyActivity, { color: colors.mutedForeground }]}>
+              Nothing yet. Your SOS alerts, journeys and reports will show up here.
+            </Text>
+          )}
           {safeActivities.map((activity, i) => (
             <View
               key={activity.id || String(i)}
@@ -194,7 +213,8 @@ export default function HomeScreen({ navigation }: any) {
                     activity.icon === 'camera' ? 'camera' :
                     activity.icon === 'phone' ? 'call' :
                     activity.icon === 'map' ? 'navigate' :
-                    activity.icon === 'check-circle' ? 'checkmark-circle' : 'alert-circle'
+                    activity.icon === 'check-circle' ? 'checkmark-circle' :
+                    activity.icon === 'alert-triangle' ? 'warning' : 'alert-circle'
                   }
                   size={14}
                   color={colors.primary}
@@ -202,7 +222,7 @@ export default function HomeScreen({ navigation }: any) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.activityText, { color: colors.foreground }]}>{String(activity.text || '')}</Text>
-                <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>{String(activity.time || '')}</Text>
+                <Text style={[styles.activityTime, { color: colors.mutedForeground }]}>{timeAgo(activity.at)}</Text>
               </View>
             </View>
           ))}
@@ -211,15 +231,12 @@ export default function HomeScreen({ navigation }: any) {
         <View style={[styles.helplineCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.helplineTitle, { color: colors.foreground }]}>Emergency Helplines</Text>
           <View style={styles.helplineRow}>
-            {[
-              { label: 'Police', number: '100', color: '#1565C0' },
-              { label: 'Women', number: '1091', color: '#C0445A' },
-              { label: 'Ambulance', number: '108', color: '#3A7D44' },
-            ].map((h, i) => (
+            {HELPLINES.map((h, i) => (
               <TouchableOpacity
                 key={i}
                 style={[styles.helplinePill, { backgroundColor: h.color + '15', borderColor: h.color }]}
-                onPress={() => Linking.openURL(`tel:${h.number}`)}
+                accessibilityLabel={`Call ${h.label} ${h.number}`}
+                onPress={() => callNumber(h.number)}
               >
                 <Ionicons name="call" size={14} color={h.color} />
                 <Text style={[styles.helplineNum, { color: h.color }]}>{h.number}</Text>
@@ -266,7 +283,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginBottom: 8,
   },
   sosHint: { fontSize: 12 },
-  shakeHint: { fontSize: 11, textAlign: 'center', opacity: 0.7 },
+  shakeHint: { fontSize: 11, textAlign: 'center', opacity: 0.8, paddingHorizontal: 8 },
+  noContacts: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12,
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: 1,
+  },
+  noContactsText: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  emptyActivity: { fontSize: 13, padding: 16, lineHeight: 19 },
   sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 12, marginTop: 4 },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
   quickCard: {

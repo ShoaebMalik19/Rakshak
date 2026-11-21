@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Animated, Easing, Platform
 } from 'react-native';
+import { NATIVE_DRIVER } from '../constants/anim';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../hooks/useColors';
@@ -15,6 +16,16 @@ const callers = [
   { id: 'doctor', name: 'Dr. Sharma', subtitle: 'Doctor', bg: '#E8F5E9', color: '#3A7D44', initial: 'D' },
 ];
 
+const CHECKLIST = [
+  { id: 'lens', title: 'Flashlight sweep for lens glints', desc: 'Lights off, shine your phone torch slowly across the room. Camera lenses reflect a small bright dot.' },
+  { id: 'ir', title: 'Look for infrared LEDs', desc: 'In the dark, view the room through your front camera. Night-vision LEDs can show up as purple or white dots.' },
+  { id: 'smoke', title: 'Smoke detectors and air fresheners', desc: 'Check for tiny holes or lenses, especially ones facing the bed or shower.' },
+  { id: 'chargers', title: 'USB chargers, clocks and adapters', desc: 'Unfamiliar chargers or clocks plugged in near the bed are common hiding spots.' },
+  { id: 'mirror', title: 'Two-way mirror test', desc: 'Touch a fingernail to the mirror. No gap between nail and reflection can mean a two-way mirror.' },
+  { id: 'wifi', title: 'Unknown Wi-Fi devices', desc: 'Look at nearby Wi-Fi network names for camera brands, or use a network scanner app.' },
+  { id: 'vents', title: 'Vents, decor and shelves', desc: 'Check vents, plant pots, picture frames and shelves facing private areas.' },
+];
+
 const delays = [
   { label: 'Now', seconds: 0 },
   { label: '10s', seconds: 10 },
@@ -25,111 +36,80 @@ const delays = [
 export default function DetectScreen({ navigation }: any) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { scans, addScan, distressListenerOn, setDistressListener, addActivity, triggerSOS } = useApp();
+  const { logActivity, recordSOS } = useApp();
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 0 : insets.bottom;
 
-  const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<null | 'safe' | 'alert'>(null);
-  const radarAnim = useRef(new Animated.Value(0)).current;
-  const radarLoop = useRef<Animated.CompositeAnimation | null>(null);
-
+  const [checked, setChecked] = useState<string[]>([]);
   const [selectedCaller, setSelectedCaller] = useState(callers[0]);
   const [selectedDelay, setSelectedDelay] = useState(delays[0]);
   const [countdown, setCountdown] = useState(0);
 
-  const [sensitivity, setSensitivity] = useState<'Low' | 'Medium' | 'High'>('Medium');
-  const [keyword] = useState('help me');
   const [sosVisible, setSOSVisible] = useState(false);
-  const soundwaveAnim = useRef(new Animated.Value(0)).current;
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'camera' | 'distress' | 'fakecall'>('camera');
+  const [activeTab, setActiveTab] = useState<'camera' | 'distress' | 'fakecall'>('fakecall');
 
-  useEffect(() => {
-    if (distressListenerOn) {
-      const loop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(soundwaveAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-          Animated.timing(soundwaveAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      loop.start();
-      return () => loop.stop();
-    }
-    soundwaveAnim.setValue(0);
-  }, [distressListenerOn]);
+  useEffect(() => () => { if (countdownRef.current) clearInterval(countdownRef.current); }, []);
 
-  const startScan = () => {
-    setScanning(true);
-    setScanResult(null);
-    radarLoop.current = Animated.loop(
-      Animated.timing(radarAnim, { toValue: 1, duration: 2000, easing: Easing.linear, useNativeDriver: true })
-    );
-    radarLoop.current.start();
-    setTimeout(() => {
-      radarLoop.current?.stop();
-      radarAnim.setValue(0);
-      setScanning(false);
-      const result = Math.random() < 0.3 ? 'alert' : 'safe';
-      setScanResult(result);
-      addScan({
-        id: Date.now().toString() + Math.random(),
-        location: 'Current Location, Bengaluru',
-        result,
-        timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-      });
-      addActivity({
-        id: Date.now().toString() + Math.random(),
-        text: result === 'alert' ? 'Camera scan — potential threat detected' : 'Camera scan — all clear',
-        time: 'Just now',
-        icon: 'camera',
-      });
-    }, 4000);
+  const toggleCheck = (id: string) => {
+    setChecked(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      if (next.length === CHECKLIST.length && prev.length !== CHECKLIST.length) {
+        logActivity('Room checked for hidden cameras', 'camera');
+      }
+      return next;
+    });
+  };
+
+  const ring = () => {
+    logActivity(`Fake call from ${selectedCaller.name}`, 'phone');
+    navigation.navigate('IncomingCall', {
+      name: selectedCaller.name,
+    });
+  };
+
+  const cancelScheduled = () => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    countdownRef.current = null;
+    setCountdown(0);
   };
 
   const triggerFakeCall = () => {
-    if (selectedDelay.seconds === 0) {
-      navigation.navigate('IncomingCall', {
-        caller: { name: selectedCaller.name, initials: selectedCaller.initial, color: selectedCaller.bg }
-      });
-    } else {
-      setCountdown(selectedDelay.seconds);
-      const t = setInterval(() => {
-        setCountdown(c => {
-          if (c <= 1) {
-            clearInterval(t);
-            navigation.navigate('IncomingCall', {
-              caller: { name: selectedCaller.name, initials: selectedCaller.initial, color: selectedCaller.bg }
-            });
-            return 0;
-          }
-          return c - 1;
-        });
-      }, 1000);
-    }
+    if (countdown > 0) return cancelScheduled();
+    if (selectedDelay.seconds === 0) return ring();
+    setCountdown(selectedDelay.seconds);
+    const endsAt = Date.now() + selectedDelay.seconds * 1000;
+    countdownRef.current = setInterval(() => {
+      const left = Math.ceil((endsAt - Date.now()) / 1000);
+      if (left <= 0) {
+        cancelScheduled();
+        ring();
+      } else {
+        setCountdown(left);
+      }
+    }, 250);
   };
 
-  const radarRotate = radarAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const safeScanHistory = (scans || []).slice(0, 3);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <SOSModal
         visible={sosVisible}
         onCancel={() => setSOSVisible(false)}
-        onComplete={() => { setSOSVisible(false); triggerSOS(); }}
+        onComplete={(summary) => { setSOSVisible(false); recordSOS(summary); }}
       />
 
       <View style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Detection Tools</Text>
+        <Text style={[styles.headerTitle, { color: colors.foreground }]}>Safety Tools</Text>
       </View>
 
       <View style={[styles.tabRow, { backgroundColor: colors.card, marginHorizontal: 16 }]}>
         {[
-          { id: 'camera', label: 'Scanner', icon: 'camera-outline' as const },
-          { id: 'distress', label: 'Distress', icon: 'mic-outline' as const },
           { id: 'fakecall', label: 'Fake Call', icon: 'call-outline' as const },
+          { id: 'camera', label: 'Cam Check', icon: 'camera-outline' as const },
+          { id: 'distress', label: 'Distress', icon: 'mic-outline' as const },
         ].map(tab => (
           <TouchableOpacity
             key={tab.id}
@@ -145,7 +125,7 @@ export default function DetectScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 90 }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}
         showsVerticalScrollIndicator={false}
       >
         {activeTab === 'camera' && (
@@ -153,68 +133,40 @@ export default function DetectScreen({ navigation }: any) {
             <View style={[styles.instructCard, { backgroundColor: colors.accent + '15' }]}>
               <Ionicons name="information-circle" size={16} color={colors.accent} />
               <Text style={[styles.instructText, { color: colors.foreground }]}>
-                Point your phone around the room slowly while scanning
+                A phone can't reliably detect hidden cameras on its own, so Rakshak doesn't fake a scan. Use this checklist for a manual sweep of a hotel room, changing room or rental.
               </Text>
             </View>
-            <View style={[styles.radarOuter, { borderColor: colors.border }]}>
-              <View style={[styles.radarInner, { borderColor: colors.border }]}>
-                {scanning && (
-                  <Animated.View style={[styles.radarSweep, { transform: [{ rotate: radarRotate }] }]}>
-                    <View style={[styles.sweepLine, { backgroundColor: colors.safe }]} />
-                  </Animated.View>
-                )}
-                {scanResult === 'safe' && !scanning && (
-                  <View style={[styles.resultCircle, { backgroundColor: colors.safe + '20' }]}>
-                    <Ionicons name="checkmark-circle" size={36} color={colors.safe} />
-                  </View>
-                )}
-                {scanResult === 'alert' && !scanning && (
-                  <View style={[styles.resultCircle, { backgroundColor: colors.primary + '20' }]}>
-                    <Ionicons name="warning" size={36} color={colors.primary} />
-                  </View>
-                )}
-                {!scanning && !scanResult && (
-                  <View style={[styles.radarCenter, { backgroundColor: colors.safe + '30' }]}>
-                    <Ionicons name="wifi" size={28} color={colors.safe} />
-                  </View>
-                )}
-              </View>
-            </View>
-            {scanResult && (
-              <View style={[styles.resultBanner, { backgroundColor: scanResult === 'safe' ? colors.safe + '15' : colors.primary + '15' }]}>
-                <Text style={[styles.resultTitle, { color: scanResult === 'safe' ? colors.safe : colors.primary }]}>
-                  {scanResult === 'safe' ? 'No hidden cameras detected' : "Potential IR source detected at 2 o'clock position"}
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={[styles.scanBtn, { backgroundColor: scanning ? colors.muted : colors.primary }]}
-              onPress={startScan}
-              disabled={scanning}
-            >
-              <Ionicons name={scanning ? 'reload' : 'search'} size={18} color={scanning ? colors.mutedForeground : '#fff'} />
-              <Text style={[styles.scanBtnText, { color: scanning ? colors.mutedForeground : '#fff' }]}>
-                {scanning ? 'Scanning...' : 'Start Scan'}
+            <View style={[styles.checkProgress, { backgroundColor: colors.card }]}>
+              <Text style={[styles.checkCount, { color: checked.length === CHECKLIST.length ? colors.safe : colors.foreground }]}>
+                {checked.length}/{CHECKLIST.length}
               </Text>
-            </TouchableOpacity>
-            {safeScanHistory.length > 0 && (
-              <>
-                <Text style={[styles.histTitle, { color: colors.foreground }]}>Scan History</Text>
-                {safeScanHistory.map(scan => (
-                  <View key={scan.id} style={[styles.scanRecord, { backgroundColor: colors.card }]}>
-                    <View style={[styles.scanIcon, { backgroundColor: scan.result === 'safe' ? colors.safe + '20' : colors.primary + '20' }]}>
-                      <Ionicons name={scan.result === 'safe' ? 'checkmark-circle' : 'warning'} size={16} color={scan.result === 'safe' ? colors.safe : colors.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.scanLoc, { color: colors.foreground }]}>{String(scan.location || '')}</Text>
-                      <Text style={[styles.scanTime, { color: colors.mutedForeground }]}>{String(scan.timestamp || '')}</Text>
-                    </View>
-                    <Text style={[styles.scanResult, { color: scan.result === 'safe' ? colors.safe : colors.primary }]}>
-                      {scan.result === 'safe' ? 'Clear' : 'Alert'}
-                    </Text>
+              <Text style={[styles.checkCountLabel, { color: colors.mutedForeground }]}>
+                {checked.length === CHECKLIST.length ? 'Sweep complete. If anything looked wrong, leave and report it.' : 'checks done'}
+              </Text>
+            </View>
+            {CHECKLIST.map(item => {
+              const done = checked.includes(item.id);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.checkRow, { backgroundColor: colors.card, borderColor: done ? colors.safe : colors.border }]}
+                  onPress={() => toggleCheck(item.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.checkBox, { backgroundColor: done ? colors.safe : 'transparent', borderColor: done ? colors.safe : colors.border }]}>
+                    {done && <Ionicons name="checkmark" size={14} color="#fff" />}
                   </View>
-                ))}
-              </>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.checkTitle, { color: colors.foreground }]}>{item.title}</Text>
+                    <Text style={[styles.checkDesc, { color: colors.mutedForeground }]}>{item.desc}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {checked.length > 0 && (
+              <TouchableOpacity onPress={() => setChecked([])} style={{ alignSelf: 'center', padding: 10 }}>
+                <Text style={{ color: colors.mutedForeground, fontWeight: '600' }}>Reset checklist</Text>
+              </TouchableOpacity>
             )}
           </>
         )}
@@ -224,66 +176,22 @@ export default function DetectScreen({ navigation }: any) {
             <View style={[styles.distressCard, { backgroundColor: colors.card }]}>
               <View style={styles.distressHeader}>
                 <Text style={[styles.distressTitle, { color: colors.foreground }]}>Distress Listener</Text>
-                <TouchableOpacity
-                  style={[styles.toggle, { backgroundColor: distressListenerOn ? colors.primary : colors.muted }]}
-                  onPress={() => setDistressListener(!distressListenerOn)}
-                >
-                  <View style={[styles.toggleKnob, { transform: [{ translateX: distressListenerOn ? 22 : 2 }] }]} />
-                </TouchableOpacity>
-              </View>
-              {distressListenerOn && (
-                <View style={styles.soundwave}>
-                  {[20, 35, 50, 40, 60, 35, 45, 25, 30].map((h, i) => (
-                    <Animated.View
-                      key={i}
-                      style={[
-                        styles.bar,
-                        {
-                          backgroundColor: colors.primary,
-                          height: h,
-                          opacity: soundwaveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
-                          transform: [{ scaleY: soundwaveAnim.interpolate({ inputRange: [0, 1], outputRange: [0.5 + i * 0.05, 1] }) }],
-                        }
-                      ]}
-                    />
-                  ))}
+                <View style={[styles.soonBadge, { backgroundColor: colors.accent + '20' }]}>
+                  <Text style={[styles.soonText, { color: colors.accent }]}>COMING SOON</Text>
                 </View>
-              )}
-              <Text style={[styles.listenStatus, { color: distressListenerOn ? colors.primary : colors.mutedForeground }]}>
-                {distressListenerOn ? 'Listening for distress signals...' : 'Listener is off'}
+              </View>
+              <Text style={[styles.infoText, { color: colors.mutedForeground, marginBottom: 16 }]}>
+                The plan: listen for a safe word such as "help me" and start the SOS countdown hands-free.
+                This needs on-device speech recognition in a native build, so it is not active in this version.
+                Rakshak is not listening to your microphone.
               </Text>
-            </View>
-            <View style={[styles.settingsCard, { backgroundColor: colors.card }]}>
-              <Text style={[styles.settingLabel, { color: colors.foreground }]}>Trigger Keyword</Text>
-              <View style={[styles.keywordRow, { backgroundColor: colors.secondary, borderColor: colors.border }]}>
-                <Ionicons name="mic" size={14} color={colors.primary} />
-                <Text style={[styles.keyword, { color: colors.foreground }]}>{keyword}</Text>
-              </View>
-              <Text style={[styles.settingLabel, { color: colors.foreground, marginTop: 16 }]}>Sensitivity</Text>
-              <View style={styles.sensitivityRow}>
-                {(['Low', 'Medium', 'High'] as const).map(s => (
-                  <TouchableOpacity
-                    key={s}
-                    style={[styles.sensBtn, { backgroundColor: sensitivity === s ? colors.primary : colors.secondary }]}
-                    onPress={() => setSensitivity(s)}
-                  >
-                    <Text style={[styles.sensText, { color: sensitivity === s ? '#fff' : colors.foreground }]}>{s}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
               <TouchableOpacity
                 style={[styles.simulateBtn, { backgroundColor: colors.primary + '20', borderColor: colors.primary }]}
                 onPress={() => setSOSVisible(true)}
               >
-                <Ionicons name="flash" size={16} color={colors.primary} />
-                <Text style={[styles.simulateText, { color: colors.primary }]}>Simulate Detection</Text>
+                <Ionicons name="play" size={16} color={colors.primary} />
+                <Text style={[styles.simulateText, { color: colors.primary }]}>Test the SOS flow</Text>
               </TouchableOpacity>
-            </View>
-            <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
-              <Ionicons name="information-circle" size={16} color={colors.accent} style={{ marginBottom: 8 }} />
-              <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                Rakshak listens in the background for your set keyword. When detected, it automatically triggers an SOS countdown and alerts your trusted contacts.
-              </Text>
             </View>
           </>
         )}
@@ -344,13 +252,15 @@ export default function DetectScreen({ navigation }: any) {
             )}
 
             <TouchableOpacity style={styles.triggerBtn} onPress={triggerFakeCall} activeOpacity={0.87}>
-              <Ionicons name="call" size={20} color="#fff" />
-              <Text style={styles.triggerBtnText}>Trigger Fake Call</Text>
+              <Ionicons name={countdown > 0 ? 'close' : 'call'} size={20} color="#fff" />
+              <Text style={styles.triggerBtnText}>
+                {countdown > 0 ? 'Cancel scheduled call' : selectedDelay.seconds ? `Ring me in ${selectedDelay.label}` : 'Ring me now'}
+              </Text>
             </TouchableOpacity>
 
             <View style={[styles.infoCard, { backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
               <Ionicons name="information-circle" size={18} color={colors.accent} />
-              <Text style={[styles.infoText, { color: colors.mutedForeground, flex: 1 }]}>Your phone will ring like a real call</Text>
+              <Text style={[styles.infoText, { color: colors.mutedForeground, flex: 1 }]}>The screen shows an incoming call you can answer, giving you a reason to step away. {Platform.OS === 'web' ? 'In the browser it plays a ringtone; on a phone it vibrates.' : 'Your phone vibrates while it rings.'}</Text>
             </View>
           </>
         )}
@@ -429,6 +339,15 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   infoText: { fontSize: 13, lineHeight: 20 },
+  checkProgress: { borderRadius: 16, padding: 16, marginBottom: 12, alignItems: 'center' },
+  checkCount: { fontSize: 34, fontWeight: '800' },
+  checkCountLabel: { fontSize: 13, marginTop: 2, textAlign: 'center' },
+  checkRow: { flexDirection: 'row', gap: 12, padding: 14, borderRadius: 14, borderWidth: 1.5, marginBottom: 10, alignItems: 'flex-start' },
+  checkBox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  checkTitle: { fontSize: 14, fontWeight: '700', marginBottom: 3 },
+  checkDesc: { fontSize: 12, lineHeight: 17 },
+  soonBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  soonText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   fakeCallHeader: {
     borderRadius: 18, padding: 18, marginBottom: 18, borderLeftWidth: 3,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2,

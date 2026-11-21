@@ -3,30 +3,36 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Animated, Platform, KeyboardAvoidingView, ScrollView
 } from 'react-native';
+import { NATIVE_DRIVER } from '../constants/anim';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useApp } from '../context/AppContext';
+import * as Location from 'expo-location';
+import { useApp, uid } from '../context/AppContext';
+
+/** Loose check: 7-15 digits, optional leading +, spaces and dashes allowed. */
+const isPhone = (v: string) => /^\+?[0-9][0-9\s-]{6,17}$/.test(v.trim());
 
 const steps = [
   { id: 0, title: 'What should we call you?', subtitle: "We'll personalize your safety experience", icon: 'person-circle' as const },
-  { id: 1, title: 'Who should we alert?', subtitle: 'Add an emergency contact', icon: 'people' as const },
-  { id: 2, title: 'Enable Permissions', subtitle: 'Rakshak needs these to protect you', icon: 'shield-checkmark' as const },
+  { id: 1, title: 'Who should we alert?', subtitle: 'Add an emergency contact. You can skip this and add contacts later in Profile.', icon: 'people' as const },
+  { id: 2, title: 'Permissions', subtitle: 'Rakshak only asks for what SOS needs', icon: 'shield-checkmark' as const },
 ];
 
 const permissions = [
-  { icon: 'location' as const, label: 'Location', desc: 'To detect your position' },
-  { icon: 'mic' as const, label: 'Microphone', desc: 'To detect distress sounds' },
-  { icon: 'camera' as const, label: 'Camera', desc: 'To scan for hidden cameras' },
+  { icon: 'location' as const, label: 'Location', desc: 'Adds your position to SOS messages' },
+  { icon: 'chatbubble-ellipses' as const, label: 'SMS', desc: 'Your phone asks when SOS first opens the SMS app' },
+  { icon: 'notifications' as const, label: 'Alerts', desc: 'Vibration and haptics on SOS (no permission needed)' },
 ];
 
 export default function OnboardingScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { setOnboardingComplete, setUserName, addContact } = useApp();
+  const { setUserName, addContact } = useApp();
   const [step, setStep] = useState(-1);
   const [name, setName] = useState('');
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [grantedPerms, setGrantedPerms] = useState<number[]>([]);
+  const [permNote, setPermNote] = useState('');
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const checkAnims = useRef(permissions.map(() => new Animated.Value(0))).current;
 
@@ -37,46 +43,58 @@ export default function OnboardingScreen({ navigation }: any) {
     if (step === 2 && grantedPerms.length > 0) {
       const idx = grantedPerms[grantedPerms.length - 1];
       Animated.spring(checkAnims[idx], {
-        toValue: 1, useNativeDriver: true, tension: 200, friction: 10
+        toValue: 1, useNativeDriver: NATIVE_DRIVER, tension: 200, friction: 10
       }).start();
     }
   }, [grantedPerms]);
 
   const goNext = () => {
     if (step === 0 && !name.trim()) return;
-    if (step === 1 && (!contactName.trim() || !contactPhone.trim())) return;
+    if (step === 1 && contactName.trim() && !isPhone(contactPhone)) return;
     Animated.sequence([
-      Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: NATIVE_DRIVER }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: NATIVE_DRIVER }),
     ]).start();
     if (step < 2) setStep(s => s + 1);
     else finish();
   };
 
-  const grantPerm = (idx: number) => {
-    if (!grantedPerms.includes(idx)) setGrantedPerms(prev => [...prev, idx]);
+  const grantPerm = async (idx: number) => {
+    if (grantedPerms.includes(idx)) return;
+    if (idx === 0) {
+      try {
+        const res = await Location.requestForegroundPermissionsAsync();
+        if (res.status !== 'granted') {
+          setPermNote('Location was not allowed. SOS will still work, just without your position. You can allow it later in settings.');
+          return;
+        }
+        setPermNote('');
+      } catch {
+        setPermNote('Location is not available here. SOS will still work without it.');
+        return;
+      }
+    }
+    setGrantedPerms(prev => [...prev, idx]);
   };
 
   const finish = () => {
-    const safeName = name.trim() || 'Priya';
-    setUserName(safeName);
-    if (contactName.trim() && contactPhone.trim()) {
+    setUserName(name.trim() || 'Friend');
+    if (contactName.trim() && isPhone(contactPhone)) {
       addContact({
-        id: Date.now().toString() + Math.random(),
+        id: uid(),
         name: contactName.trim(),
         phone: contactPhone.trim(),
         isPrimary: true,
         shareLocation: true,
       });
     }
-    setOnboardingComplete(true);
     navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
   };
 
   const canNext = () => {
     if (step === 0) return name.trim().length > 0;
-    if (step === 1) return contactName.trim().length > 0 && contactPhone.trim().length > 0;
-    return grantedPerms.length === 3;
+    if (step === 1) return !contactName.trim() || isPhone(contactPhone);
+    return true;
   };
 
   if (step === -1) {
@@ -163,6 +181,9 @@ export default function OnboardingScreen({ navigation }: any) {
                 onChangeText={setContactPhone}
                 keyboardType="phone-pad"
               />
+              {!!contactPhone.trim() && !isPhone(contactPhone) && (
+                <Text style={styles.phoneError}>Enter a valid phone number, for example +91 followed by 10 digits</Text>
+              )}
               <TouchableOpacity onPress={finish} style={styles.skipBtn}>
                 <Text style={styles.skipText}>I'll add later</Text>
               </TouchableOpacity>
@@ -201,7 +222,7 @@ export default function OnboardingScreen({ navigation }: any) {
                   </TouchableOpacity>
                 );
               })}
-              <Text style={styles.permHint}>Tap each permission to grant access</Text>
+              <Text style={styles.permHint}>{permNote || 'Tap Location to allow it. Everything else is asked only when needed.'}</Text>
             </View>
           )}
         </Animated.View>
@@ -255,6 +276,7 @@ const styles = StyleSheet.create({
   inputLabel: { fontSize: 12, fontWeight: '600', color: '#9C8878', marginBottom: 8, letterSpacing: 0.5, textTransform: 'uppercase' },
   input: { width: '100%', height: 56, borderRadius: 16, borderWidth: 1.5, backgroundColor: '#fff', fontSize: 18, textAlign: 'center' },
   skipBtn: { alignItems: 'center', marginTop: 16 },
+  phoneError: { color: '#C0445A', fontSize: 12, marginTop: 6, fontWeight: '600' },
   skipText: { fontSize: 13, color: '#9C8878', textDecorationLine: 'underline' },
   permsSection: { width: '100%', gap: 10 },
   permRow: {

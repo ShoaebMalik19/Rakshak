@@ -1,14 +1,26 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Modal, Animated, Platform, Alert
+  TextInput, Modal, Animated, Platform, Linking, ActivityIndicator
 } from 'react-native';
+import { NATIVE_DRIVER } from '../constants/anim';
 import MapView, { Circle, Polyline, Marker, PROVIDER_DEFAULT } from '../components/SafeMapView';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../hooks/useColors';
 import { useApp } from '../context/AppContext';
 import Toast from '../components/Toast';
+import SOSModal from '../components/SOSModal';
+import { getCurrentLocation, Coords } from '../lib/emergency';
+
+function distanceMeters(a: Coords, b: Coords) {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
 
 const BENGALURU = { latitude: 12.9716, longitude: 77.5946, latitudeDelta: 0.14, longitudeDelta: 0.12 };
 
@@ -49,7 +61,7 @@ const severityFill = (s: string) => s === 'danger' ? 'rgba(192,68,90,0.25)' : s 
 export default function MapScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { addActivity } = useApp();
+  const { recordIncident, recordSOS, logActivity } = useApp();
   const [activeTab, setActiveTab] = useState<'route' | 'zones'>('route');
   const [fromInput, setFromInput] = useState('Home');
   const [toInput, setToInput] = useState('MG Road Metro');
@@ -60,50 +72,78 @@ export default function MapScreen() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [showAllZones, setShowAllZones] = useState(true);
+  const [userLoc, setUserLoc] = useState<Coords | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [areaCheck, setAreaCheck] = useState<null | { tone: 'safe' | 'caution' | 'danger' | 'info'; text: string }>(null);
+  const [sosVisible, setSOSVisible] = useState(false);
+  const [toastTone, setToastTone] = useState<'success' | 'warning' | 'info'>('success');
   const slideAnim = useRef(new Animated.Value(500)).current;
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 0 : insets.bottom;
 
   const openReport = () => {
     setReportVisible(true);
-    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }).start();
+    Animated.spring(slideAnim, { toValue: 0, useNativeDriver: NATIVE_DRIVER, tension: 80, friction: 12 }).start();
   };
   const closeReport = () => {
-    Animated.timing(slideAnim, { toValue: 500, duration: 250, useNativeDriver: true }).start(() => setReportVisible(false));
+    Animated.timing(slideAnim, { toValue: 500, duration: 250, useNativeDriver: NATIVE_DRIVER }).start(() => setReportVisible(false));
   };
   const submitReport = () => {
     closeReport();
-    addActivity({ id: Date.now().toString() + Math.random(), text: 'Incident reported', time: 'Just now', icon: 'alert-triangle' });
-    setToastMsg('Report submitted. Thank you for keeping the community safe.');
+    recordIncident(incidentType);
+    setToastTone('info');
+    setToastMsg("Report saved on this device. Community sharing isn't live yet.");
     setToastVisible(true);
   };
 
-  const simulateRedZoneEntry = () => {
-    const zone = dangerZones[Math.floor(Math.random() * dangerZones.length)];
-    Alert.alert(
-      '⚠️ Danger Zone Detected',
-      `${zone.desc}\n\nDo you want to alert your contacts?`,
-      [
-        { text: "I'm Aware", style: 'cancel' },
-        {
-          text: 'Alert Contacts',
-          style: 'destructive',
-          onPress: () => {
-            addActivity({ id: Date.now().toString() + Math.random(), text: `Entered danger zone: ${zone.name}`, time: 'Just now', icon: 'alert-circle' });
-            setToastMsg(`Contacts alerted about ${zone.name}`);
-            setToastVisible(true);
-          }
-        },
-      ]
-    );
+  const checkMyArea = async () => {
+    setLocating(true);
+    setAreaCheck(null);
+    const loc = await getCurrentLocation();
+    setLocating(false);
+    if (!loc.ok) {
+      setAreaCheck({ tone: 'info', text: `${loc.reason}. Allow location access to check your area.` });
+      return;
+    }
+    setUserLoc(loc.coords);
+    const ranked = allZones
+      .map(z => ({ z, d: distanceMeters(loc.coords, z) }))
+      .sort((a, b) => a.d - b.d);
+    const inside = ranked.find(r => r.d <= r.z.radius);
+    const nearest = ranked[0];
+    if (inside) {
+      const detail = inside.z.desc.split('— ')[1] ?? '';
+      setAreaCheck({ tone: inside.z.severity as 'safe' | 'caution' | 'danger', text: `You are inside the sample "${inside.z.name}" ${inside.z.severity} zone. ${detail}` });
+      logActivity(`Checked area: inside ${inside.z.name} (${inside.z.severity})`, 'map');
+    } else if (nearest.d < 3000) {
+      setAreaCheck({ tone: 'info', text: `No sample zone at your position. Nearest: ${nearest.z.name} (${nearest.z.severity}), ${(nearest.d / 1000).toFixed(1)} km away.` });
+    } else {
+      setAreaCheck({ tone: 'info', text: `You're ${(nearest.d / 1000).toFixed(0)} km from the sample Bengaluru zones, so there's no zone data for your area yet.` });
+    }
+  };
+
+  const openDirections = () => {
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(fromInput)}&destination=${encodeURIComponent(toInput)}&travelmode=walking`;
+    Linking.openURL(url).catch(() => {});
   };
 
   const visibleZones = showAllZones ? allZones : dangerZones;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Toast message={toastMsg} visible={toastVisible} onHide={() => setToastVisible(false)} />
+      <Toast message={toastMsg} tone={toastTone} visible={toastVisible} onHide={() => setToastVisible(false)} />
+      <SOSModal
+        visible={sosVisible}
+        onCancel={() => setSOSVisible(false)}
+        onComplete={summary => {
+          setSOSVisible(false);
+          recordSOS(summary);
+          setToastTone(summary.startsWith('SOS sent') ? 'success' : 'warning');
+          setToastMsg(summary);
+          setToastVisible(true);
+        }}
+      />
 
       <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.background }]}>
         <Text style={[styles.headerTitle, { color: colors.foreground }]}>Safety Map</Text>
@@ -132,10 +172,17 @@ export default function MapScreen() {
         ))}
       </View>
 
+      <View style={[styles.disclaimer, { backgroundColor: colors.accent + '14' }]}>
+        <Ionicons name="information-circle" size={14} color={colors.accent} />
+        <Text style={[styles.disclaimerText, { color: colors.accent }]}>
+          Demo data: zones and route scores are illustrative samples for Bengaluru, not real crime statistics.
+        </Text>
+      </View>
+
       {activeTab === 'route' && (
         <View style={{ flex: 1 }}>
           <View style={{ position: 'relative' }}>
-            <MapView style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={BENGALURU} showsUserLocation={false}>
+            <MapView style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={BENGALURU} showsUserLocation={!!userLoc} userLocation={userLoc}>
               {routesData.map(route => (
                 <React.Fragment key={route.id}>
                   <Polyline
@@ -175,6 +222,16 @@ export default function MapScreen() {
                 <TextInput style={[styles.routeInput, { color: colors.foreground }]} value={toInput} onChangeText={setToInput} placeholder="To" placeholderTextColor={colors.mutedForeground} />
               </View>
             </View>
+            <TouchableOpacity
+              style={[styles.directionsBtn, { backgroundColor: colors.foreground, opacity: fromInput.trim() && toInput.trim() ? 1 : 0.4 }]}
+              disabled={!fromInput.trim() || !toInput.trim()}
+              onPress={openDirections}
+            >
+              <Ionicons name="walk" size={16} color="#fff" />
+              <Text style={styles.directionsText}>Open walking directions in Google Maps</Text>
+              <Ionicons name="open-outline" size={14} color="#fff" />
+            </TouchableOpacity>
+            <Text style={[styles.sampleLabel, { color: colors.mutedForeground }]}>Sample route safety scores</Text>
             {routesData.map(route => (
               <TouchableOpacity
                 key={route.id}
@@ -215,7 +272,7 @@ export default function MapScreen() {
       {activeTab === 'zones' && (
         <View style={{ flex: 1 }}>
           <View style={{ position: 'relative' }}>
-            <MapView style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={BENGALURU}>
+            <MapView style={styles.map} provider={PROVIDER_DEFAULT} initialRegion={BENGALURU} showsUserLocation={!!userLoc} userLocation={userLoc}>
               {visibleZones.map(zone => (
                 <React.Fragment key={zone.id}>
                   <Circle
@@ -240,12 +297,24 @@ export default function MapScreen() {
           </View>
           <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: bottomPad + 90 }}>
             <TouchableOpacity
-              style={[styles.simulateBtn, { backgroundColor: '#C0445A15', borderColor: '#C0445A' }]}
-              onPress={simulateRedZoneEntry}
+              style={[styles.simulateBtn, { backgroundColor: colors.primary + '12', borderColor: colors.primary }]}
+              onPress={checkMyArea}
+              disabled={locating}
             >
-              <Ionicons name="warning" size={16} color="#C0445A" />
-              <Text style={[styles.simulateBtnText, { color: '#C0445A' }]}>Simulate Zone Entry Alert</Text>
+              {locating ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="locate" size={16} color={colors.primary} />}
+              <Text style={[styles.simulateBtnText, { color: colors.primary }]}>{locating ? 'Finding you…' : 'Check my current area'}</Text>
             </TouchableOpacity>
+            {areaCheck && (
+              <View style={[styles.areaCard, { backgroundColor: colors.card, borderLeftColor: areaCheck.tone === 'info' ? '#1565C0' : severityColor(areaCheck.tone) }]}>
+                <Text style={[styles.areaText, { color: colors.foreground }]}>{areaCheck.text}</Text>
+                {(areaCheck.tone === 'danger' || areaCheck.tone === 'caution') && (
+                  <TouchableOpacity style={[styles.areaSos, { backgroundColor: colors.primary }]} onPress={() => setSOSVisible(true)}>
+                    <Ionicons name="alert-circle" size={14} color="#fff" />
+                    <Text style={styles.areaSosText}>Feel unsafe? Start SOS</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             {[
               { title: 'Danger Zones', zones: dangerZones },
               { title: 'Caution Zones', zones: cautionZones },
@@ -273,7 +342,7 @@ export default function MapScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary, bottom: bottomPad + 90 }]} onPress={openReport}>
+      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary, bottom: 16 }]} onPress={openReport}>
         <Ionicons name="add" size={22} color="#fff" />
         <Text style={styles.fabText}>Report</Text>
       </TouchableOpacity>
@@ -284,9 +353,10 @@ export default function MapScreen() {
           <Animated.View style={[styles.bottomSheet, { backgroundColor: colors.card, transform: [{ translateY: slideAnim }] }]}>
             <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>Report Incident</Text>
+            <Text style={[styles.sheetNote, { color: colors.mutedForeground }]}>Saved privately on this device for now. Community sharing needs a backend that isn't built yet.</Text>
             <View style={[styles.locationRow, { backgroundColor: colors.secondary }]}>
               <Ionicons name="location" size={16} color={colors.primary} />
-              <Text style={[styles.locationText, { color: colors.foreground }]}>Bengaluru, Karnataka (Current Location)</Text>
+              <Text style={[styles.locationText, { color: colors.foreground }]}>{userLoc ? `Near ${userLoc.latitude.toFixed(4)}, ${userLoc.longitude.toFixed(4)}` : 'Location not attached. Tap "Check my current area" first.'}</Text>
             </View>
             <Text style={[styles.label, { color: colors.mutedForeground }]}>Incident Type</Text>
             <View style={styles.incidentTypes}>
@@ -310,7 +380,7 @@ export default function MapScreen() {
               <Text style={[styles.anonText, { color: colors.foreground }]}>Submit anonymously</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.primary }]} onPress={submitReport}>
-              <Text style={styles.submitText}>Submit Report</Text>
+              <Text style={styles.submitText}>Save Report</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -333,7 +403,17 @@ const styles = StyleSheet.create({
   },
   tab: { flex: 1, paddingVertical: 10, borderRadius: 11, alignItems: 'center' },
   tabText: { fontSize: 14, fontWeight: '600' },
-  map: { height: 220 },
+  map: { height: 240 },
+  disclaimer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 16, marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  disclaimerText: { fontSize: 11, fontWeight: '600', flex: 1, lineHeight: 15 },
+  directionsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 14, marginBottom: 16 },
+  directionsText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  sampleLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 8 },
+  areaCard: { borderRadius: 14, borderLeftWidth: 3, padding: 14, marginBottom: 16, gap: 10 },
+  areaText: { fontSize: 13, lineHeight: 19 },
+  areaSos: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16 },
+  areaSosText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  sheetNote: { fontSize: 12, lineHeight: 17, marginTop: -8, marginBottom: 14 },
   legend: {
     position: 'absolute', left: 12, bottom: 12, backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 10, padding: 8, gap: 4,

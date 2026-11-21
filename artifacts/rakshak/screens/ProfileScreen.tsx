@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Platform, Switch
@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '../hooks/useColors';
-import { useApp } from '../context/AppContext';
+import { useApp, uid } from '../context/AppContext';
 
 const quotes = [
   '"Your safety is your right, not a privilege."',
@@ -15,46 +15,52 @@ const quotes = [
   '"Every step forward is an act of courage."',
 ];
 
-export default function ProfileScreen() {
+const isPhone = (v: string) => /^\+?[0-9][0-9\s-]{6,17}$/.test(v.trim());
+
+export default function ProfileScreen({ route, navigation }: any) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const {
     userName, setUserName, contacts, addContact, removeContact,
     totalSOS, journeysCompleted, incidentsReported,
-    distressListenerOn, setDistressListener
+    shakeToSOS, setShakeToSOS, setPrimaryContact, resetAll,
   } = useApp();
 
-  const topPad = Platform.OS === 'web' ? 67 : insets.top;
-  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const topPad = Platform.OS === 'web' ? 16 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 0 : insets.bottom;
 
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(userName || 'Priya');
+  const [nameInput, setNameInput] = useState(userName || '');
   const [addingContact, setAddingContact] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [shakeToSOS, setShakeToSOS] = useState(true);
-  const [autoAlert, setAutoAlert] = useState(true);
-  const [activeTab, setActiveTab] = useState<'profile' | 'contacts' | 'evidence'>('profile');
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [activeTab, setActiveTab] = useState<'profile' | 'contacts' | 'evidence'>(route?.params?.tab ?? 'profile');
+
+  // Deep link from Home ("Add an emergency contact") opens the Contacts tab.
+  useEffect(() => {
+    if (route?.params?.tab) {
+      setActiveTab(route.params.tab);
+      if (route.params.tab === 'contacts' && contacts.length === 0) setAddingContact(true);
+      navigation?.setParams?.({ tab: undefined });
+    }
+  }, [route?.params?.tab]);
+
+  useEffect(() => { setNameInput(userName || ''); }, [userName]);
 
   const quote = quotes[new Date().getDay() % quotes.length];
-  const safeUserName = String(userName || 'Priya');
-  const initials = safeUserName.split(' ').map(n => n[0] || '').join('').toUpperCase().slice(0, 2) || 'P';
+  const safeUserName = String(userName || 'Friend');
+  const initials = safeUserName.split(' ').map(n => n[0] || '').join('').toUpperCase().slice(0, 2) || 'R';
 
   const safeContacts = contacts || [];
   const safeTotalSOS = totalSOS || 0;
   const safeJourneysCompleted = journeysCompleted || 0;
   const safeIncidentsReported = incidentsReported || 0;
 
-  const evidence = [
-    { id: '1', timestamp: 'Apr 8, 2026 · 10:32 PM', type: 'Audio' as const, duration: '2m 15s', sosEvent: 'SOS Event #003' },
-    { id: '2', timestamp: 'Apr 6, 2026 · 8:17 PM', type: 'Video' as const, duration: '0m 47s', sosEvent: 'SOS Event #002' },
-    { id: '3', timestamp: 'Apr 3, 2026 · 11:02 PM', type: 'Audio' as const, duration: '1m 30s', sosEvent: 'SOS Event #001' },
-  ];
-
   const saveContact = () => {
-    if (!newName.trim() || !newPhone.trim()) return;
+    if (!newName.trim() || !isPhone(newPhone)) return;
     addContact({
-      id: Date.now().toString() + Math.random(),
+      id: uid(),
       name: newName.trim(),
       phone: newPhone.trim(),
       isPrimary: false,
@@ -86,7 +92,7 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingBottom: bottomPad + 90 }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}>
 
         {activeTab === 'profile' && (
           <>
@@ -104,7 +110,7 @@ export default function ProfileScreen() {
                   />
                   <TouchableOpacity
                     style={[styles.saveNameBtn, { backgroundColor: colors.primary }]}
-                    onPress={() => { setUserName(nameInput); setEditingName(false); }}
+                    onPress={() => { if (nameInput.trim()) setUserName(nameInput.trim()); setEditingName(false); }}
                   >
                     <Ionicons name="checkmark" size={16} color="#fff" />
                   </TouchableOpacity>
@@ -123,7 +129,7 @@ export default function ProfileScreen() {
               <Text style={[styles.cardTitle, { color: colors.foreground }]}>Safety Stats</Text>
               <View style={styles.statsRow}>
                 {[
-                  { label: 'SOS Triggered', value: safeTotalSOS, icon: 'alert-circle' as const, color: colors.primary },
+                  { label: 'SOS Alerts', value: safeTotalSOS, icon: 'alert-circle' as const, color: colors.primary },
                   { label: 'Journeys', value: safeJourneysCompleted, icon: 'navigate' as const, color: colors.safe },
                   { label: 'Incidents', value: safeIncidentsReported, icon: 'flag' as const, color: colors.accent },
                 ].map((s, i) => (
@@ -139,9 +145,7 @@ export default function ProfileScreen() {
             <View style={[styles.settingsCard, { backgroundColor: colors.card, borderLeftColor: colors.primary }]}>
               <Text style={[styles.cardTitle, { color: colors.foreground }]}>Safety Settings</Text>
               {[
-                { label: 'Shake to SOS', sub: 'Shake phone vigorously to trigger SOS', value: shakeToSOS, onChange: setShakeToSOS },
-                { label: 'Scream Detection', sub: 'Auto-detect distress sounds', value: distressListenerOn, onChange: setDistressListener },
-                { label: 'Journey Auto-Alert', sub: "Alert contacts if you don't arrive on time", value: autoAlert, onChange: setAutoAlert },
+                { label: 'Shake to SOS', sub: Platform.OS === 'web' ? 'Works in the phone app (browsers have no shake sensor)' : 'Shake your phone hard to start the SOS countdown', value: shakeToSOS, onChange: setShakeToSOS },
               ].map((setting, i) => (
                 <View key={i} style={[styles.settingRow, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
                   <View style={{ flex: 1 }}>
@@ -153,6 +157,7 @@ export default function ProfileScreen() {
                     onValueChange={setting.onChange}
                     trackColor={{ false: colors.muted, true: colors.primary }}
                     thumbColor="#fff"
+                    {...({ activeThumbColor: "#fff" } as any)}
                   />
                 </View>
               ))}
@@ -164,9 +169,26 @@ export default function ProfileScreen() {
               </View>
               <Text style={[styles.aboutTitle, { color: colors.foreground }]}>About Rakshak</Text>
               <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
-                Rakshak is your quiet guardian — a women's safety companion that works entirely offline. All data is stored on your device.
+                Rakshak is your quiet guardian: a women's safety companion. Your contacts, journeys and reports are stored only on this device. Rakshak has no server and never contacts anyone without you seeing it happen.
               </Text>
-              <Text style={[styles.version, { color: colors.mutedForeground }]}>Version 1.0.0</Text>
+              <Text style={[styles.version, { color: colors.mutedForeground }]}>Version 1.0.0 · Katha Hackathon winner</Text>
+              {confirmReset ? (
+                <View style={styles.resetRow}>
+                  <TouchableOpacity style={[styles.resetBtn, { borderColor: colors.border }]} onPress={() => setConfirmReset(false)}>
+                    <Text style={{ color: colors.foreground, fontWeight: '700' }}>Keep my data</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.resetBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                    onPress={async () => { await resetAll(); setConfirmReset(false); navigation?.reset?.({ index: 0, routes: [{ name: 'Onboarding' }] }); }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Erase everything</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity onPress={() => setConfirmReset(true)} style={{ marginTop: 12 }}>
+                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>Erase all data on this device</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={[styles.quoteCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
@@ -180,8 +202,13 @@ export default function ProfileScreen() {
           <>
             <View style={[styles.encryptBanner, { backgroundColor: colors.safe + '15' }]}>
               <Ionicons name="lock-closed" size={14} color={colors.safe} />
-              <Text style={[styles.encryptText, { color: colors.safe }]}>Contacts are stored securely on your device</Text>
+              <Text style={[styles.encryptText, { color: colors.safe }]}>Contacts are stored only on this device</Text>
             </View>
+            {safeContacts.length === 0 && !addingContact && (
+              <Text style={[styles.emptyContacts, { color: colors.mutedForeground }]}>
+                No emergency contacts yet. SOS can't reach anyone until you add at least one.
+              </Text>
+            )}
             {safeContacts.map(contact => (
               <View key={contact.id} style={[styles.contactCard, { backgroundColor: colors.card, borderLeftColor: contact.isPrimary ? colors.primary : colors.safe }]}>
                 <View style={[styles.contactAvatar, { backgroundColor: contact.isPrimary ? colors.primary : colors.muted }]}>
@@ -199,8 +226,14 @@ export default function ProfileScreen() {
                     )}
                   </View>
                   <Text style={[styles.contactPhone, { color: colors.mutedForeground }]}>{String(contact.phone || '')}</Text>
+                  {!contact.isPrimary && (
+                    <TouchableOpacity onPress={() => setPrimaryContact(contact.id)}>
+                      <Text style={[styles.makePrimary, { color: colors.primary }]}>Make primary</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <TouchableOpacity
+                  accessibilityLabel={`Remove ${contact.name}`}
                   onPress={() => removeContact(contact.id)}
                   style={[styles.deleteBtn, { backgroundColor: colors.primary + '10' }]}
                 >
@@ -226,6 +259,9 @@ export default function ProfileScreen() {
                   onChangeText={setNewPhone}
                   keyboardType="phone-pad"
                 />
+                {!!newPhone.trim() && !isPhone(newPhone) && (
+                  <Text style={[styles.phoneError, { color: colors.primary }]}>Enter a valid phone number, e.g. +91 followed by 10 digits</Text>
+                )}
                 <View style={styles.addActions}>
                   <TouchableOpacity
                     style={[styles.cancelAddBtn, { borderColor: colors.border }]}
@@ -234,9 +270,9 @@ export default function ProfileScreen() {
                     <Text style={[styles.cancelAddText, { color: colors.foreground }]}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.saveAddBtn, { backgroundColor: colors.primary }]}
+                    style={[styles.saveAddBtn, { backgroundColor: colors.primary, opacity: newName.trim() && isPhone(newPhone) ? 1 : 0.5 }]}
                     onPress={saveContact}
-                    disabled={!newName.trim() || !newPhone.trim()}
+                    disabled={!newName.trim() || !isPhone(newPhone)}
                   >
                     <Text style={styles.saveAddText}>Save</Text>
                   </TouchableOpacity>
@@ -255,31 +291,16 @@ export default function ProfileScreen() {
         )}
 
         {activeTab === 'evidence' && (
-          <>
-            {evidence.map(e => (
-              <View key={e.id} style={[styles.evidenceCard, { backgroundColor: colors.card, borderLeftColor: e.type === 'Audio' ? colors.accent : colors.primary }]}>
-                <View style={[styles.evidenceIcon, { backgroundColor: e.type === 'Audio' ? colors.accent + '20' : colors.primary + '20' }]}>
-                  <Ionicons name={e.type === 'Audio' ? 'mic' : 'videocam'} size={18} color={e.type === 'Audio' ? colors.accent : colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.evidenceType, { color: colors.foreground }]}>{e.type} Recording</Text>
-                  <Text style={[styles.evidenceTimestamp, { color: colors.mutedForeground }]}>{e.timestamp}</Text>
-                  <Text style={[styles.evidenceDuration, { color: colors.mutedForeground }]}>{e.duration} · {e.sosEvent}</Text>
-                </View>
-                <View style={styles.evidenceActions}>
-                  <TouchableOpacity style={[styles.evidenceBtn, { backgroundColor: colors.secondary }]}>
-                    <Ionicons name="play" size={14} color={colors.foreground} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.evidenceBtn, { backgroundColor: colors.secondary }]}>
-                    <Ionicons name="share" size={14} color={colors.foreground} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.evidenceBtn, { backgroundColor: colors.primary + '15' }]}>
-                    <Ionicons name="trash" size={14} color={colors.primary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </>
+          <View style={[styles.evidenceEmpty, { backgroundColor: colors.card }]}>
+            <View style={[styles.aboutIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Ionicons name="lock-closed" size={24} color={colors.primary} />
+            </View>
+            <Text style={[styles.aboutTitle, { color: colors.foreground }]}>Evidence Vault</Text>
+            <Text style={[styles.aboutText, { color: colors.mutedForeground }]}>
+              No recordings yet. Planned: automatic audio recording during an SOS, stored encrypted on your phone.
+              Recording is not built into this version, so nothing is being recorded.
+            </Text>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -288,6 +309,12 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  emptyContacts: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginVertical: 16, paddingHorizontal: 12 },
+  makePrimary: { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  phoneError: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  resetRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  resetBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 18, borderWidth: 1.5 },
+  evidenceEmpty: { borderRadius: 18, padding: 24, alignItems: 'center' },
   tabRow: { flexDirection: 'row', paddingBottom: 0, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 3 },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, gap: 6, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabText: { fontSize: 13, fontWeight: '600' },

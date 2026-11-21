@@ -16,7 +16,8 @@ export default function IncomingCallScreen({ route, navigation }: any) {
   const params = route?.params ?? {};
   const rawCaller = params.caller ?? DEFAULT_CALLER;
 
-  const callerName = rawCaller.name || 'Mom';
+  // Plain string param keeps the web URL readable (/call?name=Mom).
+  const callerName: string = params.name || rawCaller.name || 'Mom';
   const colors = CALLER_COLORS[callerName] || { bg: '#FCE4EC', fg: '#C0445A' };
 
   const [callState, setCallState] = useState<'incoming' | 'active'>('incoming');

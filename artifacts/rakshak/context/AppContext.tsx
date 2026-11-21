@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Contact {
@@ -12,8 +12,11 @@ export interface Contact {
 export interface Journey {
   id: string;
   destination: string;
+  /** Display string, e.g. "21:30". */
   expectedArrival: string;
   startTime: number;
+  /** Epoch ms when the journey is due. */
+  deadline: number;
   status: 'active' | 'safe' | 'alerted';
   date: string;
 }
@@ -21,16 +24,9 @@ export interface Journey {
 export interface Activity {
   id: string;
   text: string;
-  time: string;
-  icon: string;
-}
-
-export interface EvidenceEntry {
-  id: string;
-  timestamp: string;
-  type: 'Audio' | 'Video';
-  duration: string;
-  sosEvent: string;
+  /** Epoch ms. */
+  at: number;
+  icon: 'alert-circle' | 'map' | 'check-circle' | 'phone' | 'camera' | 'alert-triangle';
 }
 
 export interface ScanRecord {
@@ -40,148 +36,150 @@ export interface ScanRecord {
   timestamp: string;
 }
 
-interface AppState {
-  onboardingComplete: boolean;
+interface PersistedState {
   userName: string;
   contacts: Contact[];
   journeys: Journey[];
   activeJourney: Journey | null;
   activities: Activity[];
-  evidence: EvidenceEntry[];
-  scans: ScanRecord[];
-  distressListenerOn: boolean;
-  shakeToSOS: boolean;
-  journeyAutoAlert: boolean;
   totalSOS: number;
   journeysCompleted: number;
   incidentsReported: number;
-  setOnboardingComplete: (val: boolean) => void;
-  setUserName: (name: string) => void;
-  setContacts: (contacts: Contact[]) => void;
-  addContact: (contact: Contact) => void;
-  removeContact: (id: string) => void;
-  startJourney: (journey: Journey) => void;
-  endJourney: (id: string, status: 'safe' | 'alerted') => void;
-  addActivity: (activity: Activity) => void;
-  addScan: (scan: ScanRecord) => void;
-  setDistressListener: (val: boolean) => void;
-  triggerSOS: () => void;
+  shakeToSOS: boolean;
 }
 
-const defaultContacts: Contact[] = [
-  { id: '1', name: 'Amma', phone: '+91 98765 43210', isPrimary: true, shareLocation: true },
-  { id: '2', name: 'Rohan', phone: '+91 91234 56789', isPrimary: false, shareLocation: false },
-  { id: '3', name: 'Neha', phone: '+91 87654 32109', isPrimary: false, shareLocation: false },
-];
+interface AppState extends PersistedState {
+  hydrated: boolean;
+  scans: ScanRecord[];
+  distressListenerOn: boolean;
+  setUserName: (name: string) => void;
+  addContact: (contact: Contact) => void;
+  removeContact: (id: string) => void;
+  setPrimaryContact: (id: string) => void;
+  startJourney: (journey: Journey) => void;
+  extendJourney: (minutes: number) => void;
+  endJourney: (id: string, status: 'safe' | 'alerted') => void;
+  logActivity: (text: string, icon: Activity['icon']) => void;
+  addScan: (scan: ScanRecord) => void;
+  setDistressListener: (val: boolean) => void;
+  setShakeToSOS: (val: boolean) => void;
+  recordSOS: (summary: string) => void;
+  recordIncident: (type: string) => void;
+  resetAll: () => Promise<void>;
+}
 
-const defaultActivities: Activity[] = [
-  { id: '1', text: 'SOS triggered', time: '2 days ago', icon: 'alert-circle' },
-  { id: '2', text: 'Safe route used', time: 'Yesterday', icon: 'map' },
-  { id: '3', text: 'Journey completed safely', time: '3 days ago', icon: 'check-circle' },
-  { id: '4', text: 'Fake call triggered', time: '4 days ago', icon: 'phone' },
-  { id: '5', text: 'Camera scan - all clear', time: '5 days ago', icon: 'camera' },
-];
+const STORAGE_KEY = 'rakshak:state:v2';
 
-const defaultEvidence: EvidenceEntry[] = [
-  { id: '1', timestamp: 'Apr 8, 2026 · 10:32 PM', type: 'Audio', duration: '2m 15s', sosEvent: 'SOS Event #003' },
-  { id: '2', timestamp: 'Apr 6, 2026 · 8:17 PM', type: 'Video', duration: '0m 47s', sosEvent: 'SOS Event #002' },
-  { id: '3', timestamp: 'Apr 3, 2026 · 11:02 PM', type: 'Audio', duration: '1m 30s', sosEvent: 'SOS Event #001' },
-];
+const initialState: PersistedState = {
+  userName: '',
+  contacts: [],
+  journeys: [],
+  activeJourney: null,
+  activities: [],
+  totalSOS: 0,
+  journeysCompleted: 0,
+  incidentsReported: 0,
+  shakeToSOS: true,
+};
 
-const defaultJourneys: Journey[] = [
-  { id: 'p1', destination: 'Home from Office', expectedArrival: '8:00 PM', startTime: 0, status: 'safe', date: 'Apr 9, 2026' },
-  { id: 'p2', destination: 'MG Road Metro', expectedArrival: '6:30 PM', startTime: 0, status: 'alerted', date: 'Apr 7, 2026' },
-  { id: 'p3', destination: 'Phoenix Mall', expectedArrival: '9:00 PM', startTime: 0, status: 'safe', date: 'Apr 5, 2026' },
-  { id: 'p4', destination: 'Friend\'s Place', expectedArrival: '10:00 PM', startTime: 0, status: 'safe', date: 'Apr 2, 2026' },
-];
+const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
 const AppContext = createContext<AppState | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [onboardingComplete, setOnboardingCompleteState] = useState(false);
-  const [userName, setUserNameState] = useState('Priya');
-  const [contacts, setContactsState] = useState<Contact[]>(defaultContacts);
-  const [journeys, setJourneys] = useState<Journey[]>(defaultJourneys);
-  const [activeJourney, setActiveJourney] = useState<Journey | null>(null);
-  const [activities, setActivities] = useState<Activity[]>(defaultActivities);
-  const [evidence] = useState<EvidenceEntry[]>(defaultEvidence);
+  const [state, setState] = useState<PersistedState>(initialState);
+  const [hydrated, setHydrated] = useState(false);
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [distressListenerOn, setDistressListenerOn] = useState(false);
-  const [shakeToSOS, setShakeToSOS] = useState(false);
-  const [journeyAutoAlert, setJourneyAutoAlert] = useState(true);
-  const [totalSOS, setTotalSOS] = useState(2);
-  const [journeysCompleted, setJourneysCompleted] = useState(4);
-  const [incidentsReported, setIncidentsReported] = useState(1);
+  const skipFirstSave = useRef(true);
 
+  // Load once. The legacy 'userName' key is what App.tsx uses to decide on onboarding.
   useEffect(() => {
-    AsyncStorage.getItem('onboardingComplete').then(val => {
-      if (val === 'true') setOnboardingCompleteState(true);
-    });
-    AsyncStorage.getItem('userName').then(val => {
-      if (val) setUserNameState(val);
-    });
+    (async () => {
+      try {
+        const [raw, legacyName] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEY),
+          AsyncStorage.getItem('userName'),
+        ]);
+        const saved = raw ? (JSON.parse(raw) as Partial<PersistedState>) : {};
+        setState(s => ({ ...s, ...saved, userName: saved.userName || legacyName || '' }));
+      } catch {
+        // Corrupt storage: start fresh rather than crash.
+      } finally {
+        setHydrated(true);
+      }
+    })();
   }, []);
 
-  const setOnboardingComplete = (val: boolean) => {
-    setOnboardingCompleteState(val);
-    AsyncStorage.setItem('onboardingComplete', val ? 'true' : 'false');
+  useEffect(() => {
+    if (!hydrated) return;
+    if (skipFirstSave.current) { skipFirstSave.current = false; return; }
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
+  }, [state, hydrated]);
+
+  const update = useCallback((fn: (s: PersistedState) => Partial<PersistedState>) => {
+    setState(s => ({ ...s, ...fn(s) }));
+  }, []);
+
+  const logActivity = useCallback((text: string, icon: Activity['icon']) => {
+    update(s => ({ activities: [{ id: uid(), text, at: Date.now(), icon }, ...s.activities].slice(0, 30) }));
+  }, [update]);
+
+  const value: AppState = {
+    ...state,
+    hydrated,
+    scans,
+    distressListenerOn,
+    setUserName: (name) => {
+      update(() => ({ userName: name }));
+      AsyncStorage.setItem('userName', name).catch(() => {});
+    },
+    addContact: (contact) => update(s => {
+      const isFirst = s.contacts.length === 0;
+      return { contacts: [...s.contacts, { ...contact, isPrimary: contact.isPrimary || isFirst }] };
+    }),
+    removeContact: (id) => update(s => {
+      const rest = s.contacts.filter(c => c.id !== id);
+      if (rest.length && !rest.some(c => c.isPrimary)) rest[0] = { ...rest[0], isPrimary: true };
+      return { contacts: rest };
+    }),
+    setPrimaryContact: (id) => update(s => ({ contacts: s.contacts.map(c => ({ ...c, isPrimary: c.id === id })) })),
+    startJourney: (journey) => update(s => ({ activeJourney: journey, journeys: [journey, ...s.journeys].slice(0, 20) })),
+    extendJourney: (minutes) => update(s => {
+      if (!s.activeJourney) return {};
+      const deadline = Math.max(s.activeJourney.deadline, Date.now()) + minutes * 60_000;
+      const expectedArrival = new Date(deadline).toTimeString().slice(0, 5);
+      const activeJourney = { ...s.activeJourney, deadline, expectedArrival };
+      return { activeJourney, journeys: s.journeys.map(j => (j.id === activeJourney.id ? activeJourney : j)) };
+    }),
+    endJourney: (id, status) => {
+      update(s => ({
+        activeJourney: null,
+        journeys: s.journeys.map(j => (j.id === id ? { ...j, status } : j)),
+        journeysCompleted: status === 'safe' ? s.journeysCompleted + 1 : s.journeysCompleted,
+      }));
+      logActivity(status === 'safe' ? 'Journey completed safely' : 'Journey overdue, SOS opened', status === 'safe' ? 'check-circle' : 'alert-circle');
+    },
+    logActivity,
+    addScan: (scan) => setScans(prev => [scan, ...prev.slice(0, 4)]),
+    setDistressListener: setDistressListenerOn,
+    setShakeToSOS: (val) => update(() => ({ shakeToSOS: val })),
+    recordSOS: (summary) => {
+      update(s => ({ totalSOS: s.totalSOS + 1 }));
+      logActivity(summary, 'alert-circle');
+    },
+    recordIncident: (type) => {
+      update(s => ({ incidentsReported: s.incidentsReported + 1 }));
+      logActivity(`Incident noted: ${type}`, 'alert-triangle');
+    },
+    resetAll: async () => {
+      await AsyncStorage.multiRemove([STORAGE_KEY, 'userName', 'onboardingComplete']).catch(() => {});
+      skipFirstSave.current = true;
+      setState(initialState);
+    },
   };
 
-  const setUserName = (name: string) => {
-    setUserNameState(name);
-    AsyncStorage.setItem('userName', name);
-  };
-
-  const setContacts = (c: Contact[]) => setContactsState(c);
-
-  const addContact = (contact: Contact) => {
-    setContactsState(prev => [...prev, contact]);
-  };
-
-  const removeContact = (id: string) => {
-    setContactsState(prev => prev.filter(c => c.id !== id));
-  };
-
-  const startJourney = (journey: Journey) => {
-    setActiveJourney(journey);
-    setJourneys(prev => [journey, ...prev]);
-  };
-
-  const endJourney = (id: string, status: 'safe' | 'alerted') => {
-    setActiveJourney(null);
-    setJourneys(prev => prev.map(j => j.id === id ? { ...j, status } : j));
-    if (status === 'safe') {
-      setJourneysCompleted(prev => prev + 1);
-      addActivity({ id: Date.now().toString(), text: 'Journey completed safely', time: 'Just now', icon: 'check-circle' });
-    }
-  };
-
-  const addActivity = (activity: Activity) => {
-    setActivities(prev => [activity, ...prev]);
-  };
-
-  const addScan = (scan: ScanRecord) => {
-    setScans(prev => [scan, ...prev.slice(0, 4)]);
-  };
-
-  const setDistressListener = (val: boolean) => setDistressListenerOn(val);
-
-  const triggerSOS = () => {
-    setTotalSOS(prev => prev + 1);
-    addActivity({ id: Date.now().toString(), text: 'SOS triggered', time: 'Just now', icon: 'alert-circle' });
-  };
-
-  return (
-    <AppContext.Provider value={{
-      onboardingComplete, userName, contacts, journeys, activeJourney,
-      activities, evidence, scans, distressListenerOn, shakeToSOS,
-      journeyAutoAlert, totalSOS, journeysCompleted, incidentsReported,
-      setOnboardingComplete, setUserName, setContacts, addContact, removeContact,
-      startJourney, endJourney, addActivity, addScan, setDistressListener, triggerSOS,
-    }}>
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {
@@ -189,3 +187,5 @@ export function useApp() {
   if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
 }
+
+export { uid };

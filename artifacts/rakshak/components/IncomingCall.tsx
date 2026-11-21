@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Animated, Platform, Vibration } from 'react-native';
+import { NATIVE_DRIVER } from '@/constants/anim';
 import { Ionicons } from '@expo/vector-icons';
 
 interface IncomingCallProps {
@@ -9,6 +10,39 @@ interface IncomingCallProps {
   callerColor: string;
   onAccept: () => void;
   onDecline: () => void;
+}
+
+/** Synthesised two-tone ring for the web build (no audio asset needed). Returns a stop function. */
+function startWebRingtone(): () => void {
+  try {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return () => {};
+    const ctx = new Ctx();
+    let stopped = false;
+    const burst = (at: number) => {
+      [440, 480].forEach(freq => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.12, at + 0.05);
+        gain.gain.setValueAtTime(0.12, at + 1.0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 1.1);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(at);
+        osc.stop(at + 1.15);
+      });
+    };
+    const loop = () => {
+      if (stopped) return;
+      burst(ctx.currentTime + 0.05);
+      timer = setTimeout(loop, 3000);
+    };
+    let timer: ReturnType<typeof setTimeout> = setTimeout(loop, 0);
+    return () => { stopped = true; clearTimeout(timer); ctx.close().catch(() => {}); };
+  } catch {
+    return () => {};
+  }
 }
 
 export default function IncomingCall({ visible, callerName, callerBg, callerColor, onAccept, onDecline }: IncomingCallProps) {
@@ -22,18 +56,21 @@ export default function IncomingCall({ visible, callerName, callerBg, callerColo
 
   useEffect(() => {
     if (!visible) { slideIn.setValue(900); return; }
-    Animated.spring(slideIn, { toValue: 0, useNativeDriver: true, tension: 80, friction: 14 }).start();
+    let stopRing = () => {};
+    if (Platform.OS === 'web') stopRing = startWebRingtone();
+    else Vibration.vibrate([0, 1000, 1000], true);
+    Animated.spring(slideIn, { toValue: 0, useNativeDriver: NATIVE_DRIVER, tension: 80, friction: 14 }).start();
 
     const pulse = (anim: Animated.Value, opAnim: Animated.Value, delay: number) =>
       Animated.loop(Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(anim, { toValue: 1.6, duration: 1000, useNativeDriver: true }),
-          Animated.timing(opAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1.6, duration: 1000, useNativeDriver: NATIVE_DRIVER }),
+          Animated.timing(opAnim, { toValue: 0, duration: 1000, useNativeDriver: NATIVE_DRIVER }),
         ]),
         Animated.parallel([
-          Animated.timing(anim, { toValue: 1, duration: 0, useNativeDriver: true }),
-          Animated.timing(opAnim, { toValue: anim === ring1 ? 0.7 : anim === ring2 ? 0.45 : 0.2, duration: 0, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 1, duration: 0, useNativeDriver: NATIVE_DRIVER }),
+          Animated.timing(opAnim, { toValue: anim === ring1 ? 0.7 : anim === ring2 ? 0.45 : 0.2, duration: 0, useNativeDriver: NATIVE_DRIVER }),
         ]),
       ]));
 
@@ -41,7 +78,11 @@ export default function IncomingCall({ visible, callerName, callerBg, callerColo
     const a2 = pulse(ring2, ring2Opacity, 300);
     const a3 = pulse(ring3, ring3Opacity, 600);
     a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
+    return () => {
+      a1.stop(); a2.stop(); a3.stop();
+      stopRing();
+      if (Platform.OS !== 'web') Vibration.cancel();
+    };
   }, [visible]);
 
   const initials = callerName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -61,7 +102,7 @@ export default function IncomingCall({ visible, callerName, callerBg, callerColo
             </View>
           </View>
           <Text style={styles.callerName}>{callerName}</Text>
-          <Text style={styles.callerSub}>Rakshak · Simulated Call</Text>
+          <Text style={styles.callerSub}>mobile</Text>
         </View>
 
         {/* Bottom actions */}

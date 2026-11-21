@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
+import { NATIVE_DRIVER } from '@/constants/anim';
 import { Ionicons } from '@expo/vector-icons';
 
 interface ActiveCallProps {
@@ -17,7 +18,7 @@ export default function ActiveCall({ callerName, callerBg, callerColor, onEnd }:
   const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(fadeIn, { toValue: 1, duration: 400, useNativeDriver: NATIVE_DRIVER }).start();
     const t = setInterval(() => setSeconds(s => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
@@ -47,7 +48,7 @@ export default function ActiveCall({ callerName, callerBg, callerColor, onEnd }:
         </View>
         <Text style={styles.callerName}>{callerName}</Text>
         <Text style={styles.timer}>{fmt(seconds)}</Text>
-        <Text style={styles.simLabel}>Rakshak Simulated Call</Text>
+        <Text style={styles.simLabel}>mobile</Text>
       </View>
 
       {/* Controls */}
