@@ -51,3 +51,6 @@ Thumbs.db
 # Local archives and pasted assets
 *.zip
 attached_assets/
+
+# Local Claude Code preview config
+.claude/

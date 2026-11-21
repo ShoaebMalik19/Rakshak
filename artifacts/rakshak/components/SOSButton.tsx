@@ -86,6 +86,8 @@ export default function SOSButton({ onSOSTriggered }: SOSButtonProps) {
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={0.9}
+        accessibilityRole="button"
+        accessibilityLabel="SOS. Press and hold for 1.5 seconds to start an emergency alert"
         style={[
           styles.button,
           {
@@ -97,12 +99,9 @@ export default function SOSButton({ onSOSTriggered }: SOSButtonProps) {
         ]}
       >
         {pressing && (
-          <View style={[styles.progressRing, {
-            width: buttonSize,
-            height: buttonSize,
-            borderRadius: buttonSize / 2,
-            borderColor: 'rgba(255,255,255,0.6)',
-          }]} />
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: buttonSize / 2, overflow: 'hidden' }]}>
+            <View style={[styles.fill, { height: `${Math.round(progress * 100)}%` }]} />
+          </View>
         )}
         <Text style={styles.sosText}>SOS</Text>
         <Text style={styles.holdText}>{pressing ? `${Math.round(progress * 100)}%` : 'Hold'}</Text>
@@ -144,8 +143,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 1,
   },
-  progressRing: {
+  fill: {
     position: 'absolute',
-    borderWidth: 3,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(28,22,18,0.28)',
   },
 });
